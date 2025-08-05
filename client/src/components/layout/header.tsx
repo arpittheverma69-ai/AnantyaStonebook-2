@@ -1,6 +1,7 @@
 import { Menu, Search, Bell } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 interface HeaderProps {
   onSidebarToggle: () => void;
@@ -8,7 +9,7 @@ interface HeaderProps {
 
 export default function Header({ onSidebarToggle }: HeaderProps) {
   return (
-    <header className="bg-white border-b border-gray-200 px-6 py-4">
+    <header className="bg-background border-b px-6 py-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <Button
@@ -49,6 +50,9 @@ export default function Header({ onSidebarToggle }: HeaderProps) {
               3
             </span>
           </Button>
+          
+          {/* Theme Toggle */}
+          <ThemeToggle />
         </div>
       </div>
     </header>

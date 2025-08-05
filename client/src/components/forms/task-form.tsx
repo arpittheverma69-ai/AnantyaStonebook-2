@@ -41,7 +41,7 @@ export default function TaskForm({ task, onClose }: TaskFormProps) {
       relatedTo: task.relatedTo || "",
       relatedType: task.relatedType || "",
       assignedTo: task.assignedTo || "",
-      dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
+      dueDate: task.dueDate,
       priority: task.priority || "Medium",
       status: task.status || "Pending",
       completed: task.completed || false,

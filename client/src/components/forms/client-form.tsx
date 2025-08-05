@@ -29,6 +29,9 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
       phone: client.phone || "",
       email: client.email || "",
       address: client.address || "",
+      gstNumber: client.gstNumber || "",
+      businessName: client.businessName || "",
+      businessAddress: client.businessAddress || "",
       loyaltyLevel: client.loyaltyLevel || "Medium",
       notes: client.notes || "",
       tags: client.tags || [],
@@ -39,6 +42,9 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
       phone: "",
       email: "",
       address: "",
+      gstNumber: "",
+      businessName: "",
+      businessAddress: "",
       loyaltyLevel: "Medium",
       notes: "",
       tags: [],
@@ -221,6 +227,53 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
             </FormItem>
           )}
         />
+
+        {/* GST and Business Details Section */}
+        <div className="space-y-4 pt-4 border-t">
+          <h3 className="text-sm font-medium text-muted-foreground">GST & Business Details</h3>
+          
+          <FormField
+            control={form.control}
+            name="gstNumber"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>GST Number</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="Enter GST registration number" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="businessName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Business Name</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="Registered business name" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="businessAddress"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Business Address</FormLabel>
+                <FormControl>
+                  <Textarea {...field} rows={3} placeholder="Registered business address" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
 
         <FormField
           control={form.control}

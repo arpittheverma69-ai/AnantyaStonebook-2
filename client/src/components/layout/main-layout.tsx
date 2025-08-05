@@ -12,7 +12,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const isMobile = useIsMobile();
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
+    <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar 
         isOpen={sidebarOpen} 
         onToggle={() => setSidebarOpen(!sidebarOpen)}

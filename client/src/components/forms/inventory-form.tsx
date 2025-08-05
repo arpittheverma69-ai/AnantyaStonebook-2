@@ -1,12 +1,14 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { FileUpload } from "@/components/ui/file-upload";
 import { insertInventorySchema, type Inventory, type InsertInventory, type Supplier } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -20,6 +22,9 @@ interface InventoryFormProps {
 export default function InventoryForm({ item, onClose }: InventoryFormProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [customType, setCustomType] = useState("");
+  const [customOrigin, setCustomOrigin] = useState("");
 
   const { data: suppliers = [] } = useQuery<Supplier[]>({
     queryKey: ["/api/suppliers"],
@@ -30,8 +35,10 @@ export default function InventoryForm({ item, onClose }: InventoryFormProps) {
     defaultValues: item ? {
       stoneId: item.stoneId,
       type: item.type, 
+      customType: item.customType || "",
       carat: item.carat,
       origin: item.origin,
+      customOrigin: item.customOrigin || "",
       supplierId: item.supplierId || "",
       certified: item.certified,
       certificateLab: item.certificateLab || "",
@@ -41,11 +48,14 @@ export default function InventoryForm({ item, onClose }: InventoryFormProps) {
       packageType: item.packageType || "",
       notes: item.notes || "",
       tags: item.tags || [],
+      imageFile: item.imageFile || "",
     } : {
       stoneId: `GS-${Date.now()}`,
       type: "",
+      customType: "",
       carat: "0",
       origin: "",
+      customOrigin: "",
       supplierId: "",
       certified: false,
       certificateLab: "",
@@ -55,6 +65,7 @@ export default function InventoryForm({ item, onClose }: InventoryFormProps) {
       packageType: "",
       notes: "",
       tags: [],
+      imageFile: "",
     },
   });
 
@@ -134,7 +145,12 @@ export default function InventoryForm({ item, onClose }: InventoryFormProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Gemstone Type</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select onValueChange={(value) => {
+                  field.onChange(value);
+                  if (value === "Custom") {
+                    setCustomType("");
+                  }
+                }} defaultValue={field.value}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select type" />
@@ -144,6 +160,7 @@ export default function InventoryForm({ item, onClose }: InventoryFormProps) {
                     {GEMSTONE_TYPES.map((type) => (
                       <SelectItem key={type} value={type}>{type}</SelectItem>
                     ))}
+                    <SelectItem value="Custom">Custom Type</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -173,7 +190,12 @@ export default function InventoryForm({ item, onClose }: InventoryFormProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Origin</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select onValueChange={(value) => {
+                  field.onChange(value);
+                  if (value === "Custom") {
+                    setCustomOrigin("");
+                  }
+                }} defaultValue={field.value}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select origin" />
@@ -183,6 +205,7 @@ export default function InventoryForm({ item, onClose }: InventoryFormProps) {
                     {GEMSTONE_ORIGINS.map((origin) => (
                       <SelectItem key={origin} value={origin}>{origin}</SelectItem>
                     ))}
+                    <SelectItem value="Custom">Custom Origin</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -190,6 +213,53 @@ export default function InventoryForm({ item, onClose }: InventoryFormProps) {
             )}
           />
         </div>
+
+        {/* Custom Origin Field */}
+        {form.watch("origin") === "Custom" && (
+          <FormField
+            control={form.control}
+            name="customOrigin"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Custom Origin</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="Enter custom origin" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
+        {/* Image Upload */}
+        <FormField
+          control={form.control}
+          name="imageFile"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Stone Image</FormLabel>
+              <FormControl>
+                <FileUpload
+                  onFileSelect={(file) => {
+                    setSelectedImage(file);
+                    field.onChange(file.name);
+                  }}
+                  onFileRemove={() => {
+                    setSelectedImage(null);
+                    field.onChange("");
+                  }}
+                  currentFile={field.value}
+                  accept={{
+                    'image/*': ['.jpeg', '.jpg', '.png']
+                  }}
+                  maxSize={5 * 1024 * 1024} // 5MB
+                  className="w-full"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
         <FormField
           control={form.control}

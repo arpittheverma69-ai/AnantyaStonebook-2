@@ -33,7 +33,7 @@ export default function SaleForm({ sale, onClose }: SaleFormProps) {
     resolver: zodResolver(insertSaleSchema),
     defaultValues: sale ? {
       saleId: sale.saleId,
-      date: new Date(sale.date),
+      date: sale.date,
       clientId: sale.clientId || "",
       stoneId: sale.stoneId || "",
       quantity: sale.quantity || 1,

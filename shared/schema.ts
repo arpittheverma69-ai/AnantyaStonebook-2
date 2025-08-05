@@ -8,12 +8,15 @@ export const inventory = pgTable("inventory", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   stoneId: text("stone_id").notNull().unique(),
   type: text("type").notNull(), // Blue Sapphire, Ruby, Emerald, etc.
+  customType: text("custom_type"), // Custom gemstone type field
   carat: decimal("carat", { precision: 10, scale: 2 }).notNull(),
   origin: text("origin").notNull(), // Jaipur, Surat, Sri Lanka, etc.
+  customOrigin: text("custom_origin"), // Custom origin field
   supplierId: varchar("supplier_id").references(() => suppliers.id),
   certified: boolean("certified").default(false),
   certificateLab: text("certificate_lab"), // IGI, IIGJ, GJEPC
   certificateFile: text("certificate_file"), // File path/URL
+  imageFile: text("image_file"), // Stone image file path/URL
   purchasePrice: decimal("purchase_price", { precision: 15, scale: 2 }).notNull(),
   sellingPrice: decimal("selling_price", { precision: 15, scale: 2 }).notNull(),
   status: text("status").notNull().default("In Stock"), // In Stock, Sold, Reserved
@@ -33,6 +36,9 @@ export const clients = pgTable("clients", {
   phone: text("phone"),
   email: text("email"),
   address: text("address"),
+  gstNumber: text("gst_number"), // GST registration number
+  businessName: text("business_name"), // Business name for GST
+  businessAddress: text("business_address"), // Business address for GST
   loyaltyLevel: text("loyalty_level").default("Medium"), // High, Medium, Low
   notes: text("notes"),
   tags: text("tags").array().default([]), // Bulk Buyer, Premium, Inactive
@@ -143,6 +149,8 @@ export const insertSaleSchema = createInsertSchema(sales).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  date: z.coerce.date(),
 });
 
 export const insertCertificationSchema = createInsertSchema(certifications).omit({
@@ -155,12 +163,17 @@ export const insertConsultationSchema = createInsertSchema(consultations).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  date: z.coerce.date(),
+  nextFollowUpDate: z.coerce.date().optional().or(z.literal(undefined)),
 });
 
 export const insertTaskSchema = createInsertSchema(tasks).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  dueDate: z.coerce.date().optional().or(z.literal(undefined)),
 });
 
 // Types
