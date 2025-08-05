@@ -1,0 +1,150 @@
+"I want to build a custom CRM for my gemstone business called Anantya. It's an offline-first premium gemstone trading firm. The CRM must include modules for managing:
+
+Suppliers (domestic + international)
+
+Product Inventory (with certification status, weight, type, origin)
+
+Client Database (jewelers, astrologers, temples)
+
+Sales Transactions (per client, per stone)
+
+Certification Tracking (IGI, GJEPC, etc.)
+
+Packaging & Delivery Tracking
+
+Consultation Logs (offline in-person meetings)
+
+Finance – Purchase, Sale, Margin, Profit tracking
+
+Tasks & Reminders (for follow-ups, certification due, etc.)
+
+It must allow filtering by stone type, carat, price range, supplier, client type (jeweler/astrologer/etc.), and city. Each record should support file uploads (like lab certificate PDFs), custom tags (like ‘high margin’, ‘certified’, etc.), and allow report generation.
+
+The UI should be clean, mobile-friendly, and designed for offline-first field sales. Include dashboard widgets showing:
+
+Monthly sales
+
+Pending certifications
+
+Top-performing clients
+
+Inventory value
+
+Upcoming follow-ups"
+
+🧩 CRM Structure Blueprint for Anantya
+Below is a proper table-by-table breakdown (ideal for Airtable, Notion, or custom software):
+
+1. 📦 Inventory / Gemstone Stock
+Field	Type
+Stone ID	Auto-number
+Type	Dropdown (Blue Sapphire, Ruby, Emerald…)
+Carat (Ratti)	Number
+Origin	Dropdown (Jaipur, Surat, Sri Lanka, etc.)
+Supplier	Linked to Supplier Table
+Certified	Checkbox
+Certificate Lab	Dropdown (IGI, IIGJ, GJEPC)
+Certification File	File upload
+Price (Purchase)	₹
+Price (Selling)	₹
+Margin %	Formula
+Status	Dropdown (In Stock, Sold, Reserved)
+Package Type	Dropdown (Velvet, Leatherette)
+Notes	Text
+Tag	Multi-select (Premium, Budget, High-Demand)
+
+2. 🧑‍💼 Clients / Leads Table
+Field	Type
+Client ID	Auto-number
+Name	Text
+Client Type	Dropdown (Astrologer, Jeweler, Temple)
+City	Text
+Contact Details	Phone / Email
+Purchase History	Linked to Sales Table
+Consultation Logs	Linked to Consultation Table
+Loyalty Level	Dropdown (High, Medium, Low)
+Notes	Text
+Tags	Multi-select (Bulk Buyer, Premium, Inactive)
+
+3. 🤝 Suppliers Table
+Field	Type
+Supplier ID	Auto-number
+Name	Text
+Location	Dropdown (Jaipur, Surat, Bangkok, etc.)
+Contact Info	Phone / Email
+Type	Dropdown (Domestic, International)
+Gemstones Supplied	Multi-select
+Certification Options	Text
+Purchase History	Linked to Inventory or Sales
+Tags	Multi-select (Reliable, Delay-prone, High-Quality)
+
+4. 🧾 Sales Table
+Field	Type
+Sale ID	Auto-number
+Date	Date
+Client	Linked to Client Table
+Stone Sold	Linked to Inventory Table
+Quantity	Number
+Total Amount	₹
+Profit	Formula (Selling – Purchase)
+Invoice Uploaded	File
+Payment Status	Dropdown (Paid, Partial, Unpaid)
+Notes	Text
+
+5. 📄 Certification Tracker
+Field	Type
+Cert ID	Auto-number
+Stone	Linked to Inventory
+Lab	Dropdown
+Date Sent	Date
+Date Received	Date
+Certificate File	File
+Status	Dropdown (Pending, Received)
+Notes	Text
+
+6. 📚 Consultation Logbook
+Field	Type
+Log ID	Auto-number
+Client	Linked to Client
+Date	Date
+Medium	Dropdown (In-person, Call, Video)
+Stones Discussed	Multi-select
+Outcome	Text
+Follow-up Needed?	Checkbox
+Next Follow-up Date	Date
+Notes	Text
+
+7. 🧮 Financial Summary Table
+Field	Type
+Month	Date (monthly grouped)
+Total Purchases	₹
+Total Sales	₹
+Net Profit	Formula
+Top-Selling Stones	Multi-select
+Outstanding Payments	₹
+
+8. 📆 Task & Reminder Table
+Field	Type
+Task ID	Auto-number
+Task Name	Text
+Related To	Linked (Client, Stone, Supplier, Cert)
+Assigned To	Text
+Due Date	Date
+Priority	Dropdown (High, Medium, Low)
+Status	Dropdown (Pending, Done, Delayed)
+Notes	Text
+
+🖥️ Dashboard Suggestions
+Use widgets or Kanban views to track:
+
+📊 This Month’s Sales vs Target
+
+🧾 Certifications Pending
+
+🪙 Top Grossing Stones
+
+🧑‍💼 Top Clients (by ₹)
+
+🔔 Follow-ups This Week
+
+📦 Stones In Stock (Filter: Premium)
