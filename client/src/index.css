@@ -22,7 +22,7 @@
   --destructive: hsl(0, 84.2%, 60.2%);
   --destructive-foreground: hsl(60, 9.1%, 97.8%);
   --ring: hsl(20, 14.3%, 4.1%);
-  --radius: 0.5rem;
+  --radius: 1.5rem;
   
   /* Gemstone-inspired custom colors */
   --sapphire: hsl(207, 90%, 54%);
@@ -33,29 +33,45 @@
   --success: hsl(142, 71%, 45%);
   --warning: hsl(32, 95%, 44%);
   --error: hsl(0, 84%, 60%);
+  
+  /* Modern shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
 }
 
 .dark {
-  --background: hsl(240, 10%, 3.9%);
+  --background: hsl(240, 10%, 4.5%);
   --foreground: hsl(0, 0%, 98%);
-  --muted: hsl(240, 3.7%, 15.9%);
-  --muted-foreground: hsl(240, 5%, 64.9%);
-  --popover: hsl(240, 10%, 3.9%);
+  --muted: hsl(240, 3.7%, 14.5%);
+  --muted-foreground: hsl(240, 5%, 64%);
+  --popover: hsl(240, 9%, 6.5%);
   --popover-foreground: hsl(0, 0%, 98%);
-  --card: hsl(240, 10%, 3.9%);
+  --card: hsl(240, 9%, 7.5%);
   --card-foreground: hsl(0, 0%, 98%);
-  --border: hsl(240, 3.7%, 15.9%);
-  --input: hsl(240, 3.7%, 15.9%);
+  --border: hsl(240, 4%, 14%);
+  --input: hsl(240, 4%, 14%);
   --primary: hsl(207, 90%, 54%);
   --primary-foreground: hsl(211, 100%, 99%);
-  --secondary: hsl(240, 3.7%, 15.9%);
+  --secondary: hsl(240, 4%, 12%);
   --secondary-foreground: hsl(0, 0%, 98%);
-  --accent: hsl(240, 3.7%, 15.9%);
+  --accent: hsl(240, 4%, 12%);
   --accent-foreground: hsl(0, 0%, 98%);
-  --destructive: hsl(0, 62.8%, 30.6%);
+  --destructive: hsl(0, 62.8%, 34%);
   --destructive-foreground: hsl(0, 0%, 98%);
-  --ring: hsl(240, 4.9%, 83.9%);
-  --radius: 0.5rem;
+  --ring: hsl(240, 5%, 84%);
+  --radius: 1.5rem;
+  
+  /* Dark mode shadows - mix subtle light edge for visibility on dark */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.03);
+  --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.55), 0 1px 2px 0 rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.55), 0 2px 4px -1px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.55), 0 4px 6px -2px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 10px 10px -5px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
 @layer base {
@@ -65,6 +81,12 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+  
+  /* Smooth transitions for theme changes */
+  * {
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
   }
 }
 
@@ -73,14 +95,30 @@
     transition: all 0.3s ease-in-out;
   }
   
+  /* Modern card shadows with larger radius */
   .card-shadow {
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    box-shadow: var(--shadow);
+    border-radius: var(--radius);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
   
   .card-shadow:hover {
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
+  }
+  
+  .card-shadow-lg {
+    box-shadow: var(--shadow-lg);
+    border-radius: var(--radius);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .card-shadow-lg:hover {
+    box-shadow: var(--shadow-xl);
+    transform: translateY(-4px);
   }
 
+  /* Modern gradients */
   .gradient-primary {
     background: linear-gradient(135deg, var(--primary), var(--purple));
   }
@@ -95,5 +133,93 @@
 
   .gradient-emerald {
     background: linear-gradient(135deg, hsl(151, 49%, 46%), hsl(142, 71%, 45%));
+  }
+  
+  /* Modern glass effect */
+  .glass {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+  
+  .dark .glass {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  /* Modern button styles */
+  .btn-modern {
+    border-radius: var(--radius);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-weight: 500;
+  }
+  
+  .btn-modern:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+  }
+  
+  /* Modern input styles */
+  .input-modern {
+    border-radius: var(--radius);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: var(--background) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--foreground) !important;
+  }
+  
+  .input-modern:focus {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: var(--primary) !important;
+  }
+  
+  .input-modern:hover {
+    border-color: var(--primary) !important;
+  }
+  
+  .input-modern::placeholder {
+    color: var(--muted-foreground) !important;
+  }
+  
+  /* Ensure form fields have proper background */
+  input[type="number"],
+  input[type="text"],
+  input[type="url"],
+  input[type="email"],
+  textarea {
+    background: var(--background) !important;
+    color: var(--foreground) !important;
+  }
+  
+  /* Modern table styles */
+  .table-modern {
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  
+  /* Modern form styles */
+  .form-modern {
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    background: var(--card);
+    border: 1px solid var(--border);
+  }
+  
+  /* Modern sidebar styles */
+  .sidebar-modern {
+    border-radius: 0 var(--radius) var(--radius) 0;
+    box-shadow: var(--shadow-lg);
+  }
+  
+  /* Modern header styles */
+  .header-modern {
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.8);
+    border-bottom: 1px solid var(--border);
+  }
+  
+  .dark .header-modern {
+    background: rgba(0, 0, 0, 0.8);
   }
 }

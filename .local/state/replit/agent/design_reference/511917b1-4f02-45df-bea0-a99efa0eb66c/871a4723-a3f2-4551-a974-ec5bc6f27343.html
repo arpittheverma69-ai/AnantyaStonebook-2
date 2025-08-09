@@ -1,0 +1,529 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anantya CRM - Gemstone Business Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'inter': ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#1565C0',
+                        secondary: '#6A1B9A',
+                        accent: '#7C4DFF',
+                        success: '#2E7D32',
+                        warning: '#F57C00',
+                        error: '#C62828',
+                    }
+                }
+            }
+        };
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .sidebar-transition {
+            transition: all 0.3s ease-in-out;
+        }
+        .card-shadow {
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
+        .card-shadow:hover {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- @COMPONENT: Layout Container -->
+    <div class="flex h-screen overflow-hidden">
+        
+        <!-- @COMPONENT: Sidebar Navigation -->
+        <aside id="sidebar" class="sidebar-transition w-64 bg-white shadow-lg border-r border-gray-200 flex flex-col">
+            <!-- Logo Section -->
+            <div class="p-6 border-b border-gray-200">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center">
+                        <i class="fas fa-gem text-white text-lg"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-gray-900">Anantya</h1>
+                        <p class="text-sm text-gray-500">Premium Gemstones</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Navigation Menu -->
+            <nav class="flex-1 p-4 space-y-2">
+                <a href="#" class="flex items-center space-x-3 px-4 py-3 text-primary bg-blue-50 rounded-lg font-medium">
+                    <i class="fas fa-chart-pie w-5"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                    <i class="fas fa-boxes w-5"></i>
+                    <span>Inventory</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                    <i class="fas fa-users w-5"></i>
+                    <span>Clients</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                    <i class="fas fa-truck w-5"></i>
+                    <span>Suppliers</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                    <i class="fas fa-shopping-cart w-5"></i>
+                    <span>Sales</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                    <i class="fas fa-certificate w-5"></i>
+                    <span>Certifications</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                    <i class="fas fa-comments w-5"></i>
+                    <span>Consultations</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                    <i class="fas fa-chart-line w-5"></i>
+                    <span>Finance</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                    <i class="fas fa-tasks w-5"></i>
+                    <span>Tasks</span>
+                </a>
+            </nav>
+            
+            <!-- User Profile -->
+            <div class="p-4 border-t border-gray-200">
+                <div class="flex items-center space-x-3 px-4 py-3">
+                    <div class="w-8 h-8 bg-gray-300 rounded-full"></div>
+                    <div class="flex-1">
+                        <p class="text-sm font-medium text-gray-900" data-bind="user.name">Rajesh Kumar</p>
+                        <p class="text-xs text-gray-500">Sales Manager</p>
+                    </div>
+                    <button class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </div>
+        </aside>
+        <!-- @END_COMPONENT: Sidebar Navigation -->
+        
+        <!-- @COMPONENT: Main Content Area -->
+        <main class="flex-1 overflow-auto">
+            <!-- Header -->
+            <header class="bg-white border-b border-gray-200 px-6 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <button id="sidebarToggle" class="lg:hidden text-gray-500 hover:text-gray-700">
+                            <i class="fas fa-bars text-xl"></i>
+                        </button>
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-900">Dashboard</h2>
+                            <p class="text-gray-500">Welcome back! Here's your business overview.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center space-x-4">
+                        <!-- Offline Status Indicator -->
+                        <div class="flex items-center space-x-2 px-3 py-1 bg-green-50 text-green-700 rounded-full text-sm">
+                            <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                            <span>Online</span>
+                        </div>
+                        
+                        <!-- Search -->
+                        <div class="relative hidden md:block">
+                            <input type="text" placeholder="Search inventory, clients..." 
+                                   class="w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary">
+                            <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                        </div>
+                        
+                        <!-- Notifications -->
+                        <button class="relative p-2 text-gray-500 hover:text-gray-700">
+                            <i class="fas fa-bell text-xl"></i>
+                            <span class="absolute -top-1 -right-1 w-5 h-5 bg-error text-white text-xs rounded-full flex items-center justify-center">3</span>
+                        </button>
+                    </div>
+                </div>
+            </header>
+            
+            <!-- Dashboard Content -->
+            <div class="p-6 space-y-6">
+                
+                <!-- @COMPONENT: Metrics Cards Row -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <!-- Monthly Sales -->
+                    <div class="bg-white p-6 rounded-xl card-shadow">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-500">Monthly Sales</p>
+                                <p class="text-2xl font-bold text-gray-900" data-bind="metrics.monthlySales">₹12,45,000</p>
+                                <p class="text-sm text-success mt-1">
+                                    <i class="fas fa-arrow-up"></i> 18% from last month
+                                </p>
+                            </div>
+                            <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-chart-line text-success text-xl"></i>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Inventory Value -->
+                    <div class="bg-white p-6 rounded-xl card-shadow">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-500">Inventory Value</p>
+                                <p class="text-2xl font-bold text-gray-900" data-bind="metrics.inventoryValue">₹45,67,890</p>
+                                <p class="text-sm text-gray-600 mt-1">
+                                    <span data-bind="metrics.totalStones">234</span> stones in stock
+                                </p>
+                            </div>
+                            <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-gem text-primary text-xl"></i>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Pending Certifications -->
+                    <div class="bg-white p-6 rounded-xl card-shadow">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-500">Pending Certifications</p>
+                                <p class="text-2xl font-bold text-gray-900" data-bind="metrics.pendingCerts">12</p>
+                                <p class="text-sm text-warning mt-1">
+                                    <i class="fas fa-clock"></i> 3 due this week
+                                </p>
+                            </div>
+                            <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-certificate text-warning text-xl"></i>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Upcoming Follow-ups -->
+                    <div class="bg-white p-6 rounded-xl card-shadow">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-500">Follow-ups Today</p>
+                                <p class="text-2xl font-bold text-gray-900" data-bind="metrics.followups">7</p>
+                                <p class="text-sm text-gray-600 mt-1">
+                                    <span data-bind="metrics.highPriority">2</span> high priority
+                                </p>
+                            </div>
+                            <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-calendar-check text-secondary text-xl"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- @END_COMPONENT: Metrics Cards Row -->
+                
+                <!-- @COMPONENT: Main Dashboard Grid -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    
+                    <!-- @COMPONENT: Recent Sales Chart -->
+                    <div class="lg:col-span-2 bg-white p-6 rounded-xl card-shadow">
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="text-lg font-semibold text-gray-900">Sales Trend</h3>
+                            <select class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                <option>Last 30 days</option>
+                                <option>Last 90 days</option>
+                                <option>Last year</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Chart Placeholder -->
+                        <div class="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
+                            <div class="text-center">
+                                <i class="fas fa-chart-area text-4xl text-gray-400 mb-4"></i>
+                                <p class="text-gray-500">Sales trend chart would be rendered here</p>
+                                <p class="text-sm text-gray-400 mt-2"><!-- @FUNCTIONALITY: Integrate Chart.js or similar library --></p>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- @END_COMPONENT: Recent Sales Chart -->
+                    
+                    <!-- @COMPONENT: Top Performing Clients -->
+                    <div class="bg-white p-6 rounded-xl card-shadow">
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="text-lg font-semibold text-gray-900">Top Clients</h3>
+                            <button class="text-primary text-sm hover:underline">View All</button>
+                        </div>
+                        
+                        <!-- @MAP: topClients.map(client => ( -->
+                        <div class="space-y-4">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center">
+                                        <span class="text-white font-medium text-sm" data-bind="client.initials">RJ</span>
+                                    </div>
+                                    <div>
+                                        <p class="font-medium text-gray-900" data-bind="client.name">Raj Jewelers</p>
+                                        <p class="text-sm text-gray-500" data-bind="client.type">Jeweler - Mumbai</p>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <p class="font-semibold text-gray-900" data-bind="client.totalSales">₹8.5L</p>
+                                    <p class="text-sm text-success" data-bind="client.growth">+15%</p>
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-10 h-10 bg-gradient-to-br from-purple-400 to-purple-600 rounded-full flex items-center justify-center">
+                                        <span class="text-white font-medium text-sm" data-bind="client.initials">AS</span>
+                                    </div>
+                                    <div>
+                                        <p class="font-medium text-gray-900" data-bind="client.name">Astro Solutions</p>
+                                        <p class="text-sm text-gray-500" data-bind="client.type">Astrologer - Delhi</p>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <p class="font-semibold text-gray-900" data-bind="client.totalSales">₹6.2L</p>
+                                    <p class="text-sm text-success" data-bind="client.growth">+8%</p>
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-10 h-10 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center">
+                                        <span class="text-white font-medium text-sm" data-bind="client.initials">ST</span>
+                                    </div>
+                                    <div>
+                                        <p class="font-medium text-gray-900" data-bind="client.name">Shree Temple Trust</p>
+                                        <p class="text-sm text-gray-500" data-bind="client.type">Temple - Jaipur</p>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <p class="font-semibold text-gray-900" data-bind="client.totalSales">₹4.8L</p>
+                                    <p class="text-sm text-success" data-bind="client.growth">+22%</p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- @END_MAP )) -->
+                    </div>
+                    <!-- @END_COMPONENT: Top Performing Clients -->
+                </div>
+                <!-- @END_COMPONENT: Main Dashboard Grid -->
+                
+                <!-- @COMPONENT: Recent Activity & Quick Actions -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    
+                    <!-- @COMPONENT: Recent Inventory -->
+                    <div class="bg-white p-6 rounded-xl card-shadow">
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="text-lg font-semibold text-gray-900">Recent Inventory</h3>
+                            <button class="text-primary text-sm hover:underline" data-event="click:navigateToInventory">Manage Inventory</button>
+                        </div>
+                        
+                        <div class="space-y-4">
+                            <!-- @MAP: recentInventory.map(item => ( -->
+                            <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                                <div class="flex items-center space-x-4">
+                                    <div class="w-12 h-12 bg-gradient-to-br from-blue-400 to-purple-500 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-gem text-white"></i>
+                                    </div>
+                                    <div>
+                                        <p class="font-medium text-gray-900" data-bind="stone.type">Blue Sapphire</p>
+                                        <div class="flex items-center space-x-4 text-sm text-gray-500">
+                                            <span data-bind="stone.carat">2.5 Carat</span>
+                                            <span data-bind="stone.origin">Sri Lanka</span>
+                                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800" data-bind="stone.status">
+                                                <i class="fas fa-certificate mr-1"></i>
+                                                Certified
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <p class="font-semibold text-gray-900" data-bind="stone.price">₹45,000</p>
+                                    <p class="text-sm text-gray-500" data-bind="stone.id">#GS-2024-001</p>
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                                <div class="flex items-center space-x-4">
+                                    <div class="w-12 h-12 bg-gradient-to-br from-red-400 to-pink-500 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-gem text-white"></i>
+                                    </div>
+                                    <div>
+                                        <p class="font-medium text-gray-900" data-bind="stone.type">Ruby</p>
+                                        <div class="flex items-center space-x-4 text-sm text-gray-500">
+                                            <span data-bind="stone.carat">1.8 Carat</span>
+                                            <span data-bind="stone.origin">Myanmar</span>
+                                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800" data-bind="stone.status">
+                                                <i class="fas fa-clock mr-1"></i>
+                                                Pending Cert
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <p class="font-semibold text-gray-900" data-bind="stone.price">₹32,000</p>
+                                    <p class="text-sm text-gray-500" data-bind="stone.id">#GS-2024-002</p>
+                                </div>
+                            </div>
+                            <!-- @END_MAP )) -->
+                        </div>
+                    </div>
+                    <!-- @END_COMPONENT: Recent Inventory -->
+                    
+                    <!-- @COMPONENT: Tasks & Reminders -->
+                    <div class="bg-white p-6 rounded-xl card-shadow">
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="text-lg font-semibold text-gray-900">Today's Tasks</h3>
+                            <button class="text-primary text-sm hover:underline" data-event="click:navigateToTasks">View All Tasks</button>
+                        </div>
+                        
+                        <div class="space-y-4">
+                            <!-- @MAP: todayTasks.map(task => ( -->
+                            <div class="flex items-start space-x-3 p-3 border border-gray-200 rounded-lg">
+                                <input type="checkbox" class="mt-1 rounded border-gray-300 text-primary focus:ring-primary" data-bind="task.completed">
+                                <div class="flex-1">
+                                    <p class="font-medium text-gray-900" data-bind="task.title">Follow up with Raj Jewelers</p>
+                                    <p class="text-sm text-gray-500" data-bind="task.description">Discuss new sapphire collection requirements</p>
+                                    <div class="flex items-center space-x-4 mt-2">
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800" data-bind="task.priority">
+                                            High Priority
+                                        </span>
+                                        <span class="text-xs text-gray-500" data-bind="task.dueTime">Due: 3:00 PM</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-start space-x-3 p-3 border border-gray-200 rounded-lg">
+                                <input type="checkbox" class="mt-1 rounded border-gray-300 text-primary focus:ring-primary" data-bind="task.completed">
+                                <div class="flex-1">
+                                    <p class="font-medium text-gray-900" data-bind="task.title">Update certification status</p>
+                                    <p class="text-sm text-gray-500" data-bind="task.description">Process IGI certificates received today</p>
+                                    <div class="flex items-center space-x-4 mt-2">
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800" data-bind="task.priority">
+                                            Medium Priority
+                                        </span>
+                                        <span class="text-xs text-gray-500" data-bind="task.dueTime">Due: 5:00 PM</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-start space-x-3 p-3 border border-gray-200 rounded-lg bg-green-50">
+                                <input type="checkbox" checked class="mt-1 rounded border-gray-300 text-primary focus:ring-primary" data-bind="task.completed">
+                                <div class="flex-1">
+                                    <p class="font-medium text-gray-600 line-through" data-bind="task.title">Supplier payment to Jaipur Gems</p>
+                                    <p class="text-sm text-gray-500" data-bind="task.description">Payment of ₹2,50,000 completed</p>
+                                    <div class="flex items-center space-x-4 mt-2">
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            <i class="fas fa-check mr-1"></i>
+                                            Completed
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- @END_MAP )) -->
+                        </div>
+                    </div>
+                    <!-- @END_COMPONENT: Tasks & Reminders -->
+                </div>
+                <!-- @END_COMPONENT: Recent Activity & Quick Actions -->
+                
+                <!-- @COMPONENT: Quick Actions Bar -->
+                <div class="bg-white p-6 rounded-xl card-shadow">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                        <button class="flex flex-col items-center space-y-2 p-4 border border-gray-200 rounded-lg hover:bg-primary hover:text-white hover:border-primary transition-all group" data-event="click:addNewStone">
+                            <i class="fas fa-plus-circle text-2xl group-hover:text-white text-primary"></i>
+                            <span class="text-sm font-medium">Add Stone</span>
+                        </button>
+                        
+                        <button class="flex flex-col items-center space-y-2 p-4 border border-gray-200 rounded-lg hover:bg-primary hover:text-white hover:border-primary transition-all group" data-event="click:addNewClient">
+                            <i class="fas fa-user-plus text-2xl group-hover:text-white text-primary"></i>
+                            <span class="text-sm font-medium">Add Client</span>
+                        </button>
+                        
+                        <button class="flex flex-col items-center space-y-2 p-4 border border-gray-200 rounded-lg hover:bg-primary hover:text-white hover:border-primary transition-all group" data-event="click:recordSale">
+                            <i class="fas fa-shopping-cart text-2xl group-hover:text-white text-primary"></i>
+                            <span class="text-sm font-medium">Record Sale</span>
+                        </button>
+                        
+                        <button class="flex flex-col items-center space-y-2 p-4 border border-gray-200 rounded-lg hover:bg-primary hover:text-white hover:border-primary transition-all group" data-event="click:generateReport">
+                            <i class="fas fa-chart-bar text-2xl group-hover:text-white text-primary"></i>
+                            <span class="text-sm font-medium">Generate Report</span>
+                        </button>
+                        
+                        <button class="flex flex-col items-center space-y-2 p-4 border border-gray-200 rounded-lg hover:bg-primary hover:text-white hover:border-primary transition-all group" data-event="click:syncData">
+                            <i class="fas fa-sync-alt text-2xl group-hover:text-white text-primary"></i>
+                            <span class="text-sm font-medium">Sync Data</span>
+                        </button>
+                        
+                        <button class="flex flex-col items-center space-y-2 p-4 border border-gray-200 rounded-lg hover:bg-primary hover:text-white hover:border-primary transition-all group" data-event="click:exportData">
+                            <i class="fas fa-download text-2xl group-hover:text-white text-primary"></i>
+                            <span class="text-sm font-medium">Export</span>
+                        </button>
+                    </div>
+                </div>
+                <!-- @END_COMPONENT: Quick Actions Bar -->
+            </div>
+        </main>
+        <!-- @END_COMPONENT: Main Content Area -->
+    </div>
+    <!-- @END_COMPONENT: Layout Container -->
+    
+    <!-- @COMPONENT: Mobile Sidebar Overlay -->
+    <div id="sidebarOverlay" class="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden hidden"></div>
+    <!-- @END_COMPONENT: Mobile Sidebar Overlay -->
+
+    <!-- @STATE: sidebarOpen:boolean = false -->
+    <!-- @STATE: selectedModule:string = 'dashboard' -->
+    <!-- @STATE: offlineMode:boolean = false -->
+
+    <script>
+        // TODO: Implement business logic, API calls, and state management
+        (function() {
+            // Mobile sidebar toggle
+            const sidebarToggle = document.getElementById('sidebarToggle');
+            const sidebar = document.getElementById('sidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+            
+            function toggleSidebar() {
+                sidebar.classList.toggle('-translate-x-full');
+                sidebarOverlay.classList.toggle('hidden');
+            }
+            
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('click', toggleSidebar);
+            }
+            
+            if (sidebarOverlay) {
+                sidebarOverlay.addEventListener('click', toggleSidebar);
+            }
+            
+            // Responsive sidebar on mobile
+            function handleResize() {
+                if (window.innerWidth >= 1024) {
+                    sidebar.classList.remove('-translate-x-full');
+                    sidebarOverlay.classList.add('hidden');
+                } else {
+                    sidebar.classList.add('-translate-x-full');
+                }
+            }
+            
+            window.addEventListener('resize', handleResize);
+            handleResize(); // Initial call
+            
+            // TODO: Implement offline-first data persistence using IndexedDB
+            // TODO: Add service worker for offline functionality
+            // TODO: Implement data sync logic when online
+            // TODO: Add form validation for gemstone-specific requirements
+            // TODO: Implement search and filtering functionality
+            // TODO: Add file upload handling for certificates
+            // TODO: Implement chart rendering for sales trends
+            // TODO: Add task management and reminder notifications
+        })();
+    </script>
+</body>
+</html>

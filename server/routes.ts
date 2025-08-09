@@ -1,6 +1,10 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { geminiService } from "./gemini-service";
+import { astrologicalAIService } from "./astrological-ai";
+import { taskAutomationService } from "./task-automation";
+// Remove custom auth service and middleware; Supabase client-only auth
 import {
   insertInventorySchema,
   insertClientSchema,
@@ -13,6 +17,12 @@ import {
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client
+const supabaseUrl = 'https://luaoeowqcvnbjcpascnk.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx1YW9lb3dxY3ZuYmpjcGFzY25rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQzOTgxMTEsImV4cCI6MjA2OTk3NDExMX0.Gf8dsa6oxudXZ8AB2mpz_FVTFx2y8wyD6TF7dyAWBG8';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Configure multer for file uploads
 const uploadDir = path.join(process.cwd(), "uploads");
@@ -40,12 +50,18 @@ const upload = multer({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+
+  // No custom auth endpoints: use Supabase client-side auth only
+
   // Dashboard metrics endpoint
   app.get("/api/dashboard/metrics", async (req, res) => {
     try {
       const inventory = await storage.getInventory();
       const sales = await storage.getSales();
+      const clients = await storage.getClients();
+      const suppliers = await storage.getSuppliers();
       const certifications = await storage.getCertifications();
+      const consultations = await storage.getConsultations();
       const tasks = await storage.getTasks();
       
       // Calculate monthly sales (current month)
@@ -54,25 +70,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const monthlySales = await storage.getSalesByDateRange(startOfMonth, now);
       const monthlyRevenue = monthlySales.reduce((sum, sale) => sum + parseFloat(sale.totalAmount), 0);
       
-      // Calculate inventory value
+      // Calculate inventory value and stats
       const inventoryValue = inventory.reduce((sum, item) => sum + parseFloat(item.sellingPrice), 0);
+      const availableStones = inventory.filter(item => item.isAvailable).length;
+      const soldStones = inventory.filter(item => !item.isAvailable).length;
+      const lowStockItems = inventory.filter(item => parseFloat(item.quantity) < 5).length;
+      
+      // Calculate client metrics
+      const totalClients = clients.length;
+      const activeClients = clients.filter(client => client.isRecurring).length;
+      const trustworthyClients = clients.filter(client => client.isTrustworthy).length;
+      
+      // Calculate supplier metrics
+      const totalSuppliers = suppliers.length;
+      const domesticSuppliers = suppliers.filter(supplier => supplier.type === 'Domestic').length;
+      const internationalSuppliers = suppliers.filter(supplier => supplier.type === 'International').length;
+      const highQualitySuppliers = suppliers.filter(supplier => (supplier.qualityRating || 0) >= 4).length;
+      
+      // Calculate sales metrics
+      const totalSales = sales.length;
+      const totalRevenue = sales.reduce((sum, sale) => sum + parseFloat(sale.totalAmount), 0);
+      const avgSaleValue = totalSales > 0 ? totalRevenue / totalSales : 0;
+      const pendingPayments = sales.filter(sale => sale.paymentStatus === 'Pending').length;
       
       // Get pending certifications
       const pendingCerts = await storage.getPendingCertifications();
       
-      // Get today's tasks
+      // Get today's tasks and consultations
       const today = new Date();
       const todayTasks = await storage.getTasksByDueDate(today);
+      const todayConsultations = consultations.filter(consultation => {
+        const consultationDate = new Date(consultation.date);
+        return consultationDate.toDateString() === today.toDateString();
+      });
+      
+      // Calculate task metrics
+      const pendingTasks = await storage.getPendingTasks();
+      const highPriorityTasks = tasks.filter(task => task.priority === "High").length;
+      const overdueTasks = tasks.filter(task => {
+        const dueDate = new Date(task.dueDate);
+        return dueDate < today && task.status !== "Completed";
+      }).length;
       
       res.json({
+        // Sales metrics
         monthlySales: monthlyRevenue,
+        totalRevenue,
+        totalSales,
+        avgSaleValue,
+        pendingPayments,
+        
+        // Inventory metrics
         inventoryValue,
         totalStones: inventory.length,
+        availableStones,
+        soldStones,
+        lowStockItems,
+        
+        // Client metrics
+        totalClients,
+        activeClients,
+        trustworthyClients,
+        
+        // Supplier metrics
+        totalSuppliers,
+        domesticSuppliers,
+        internationalSuppliers,
+        highQualitySuppliers,
+        
+        // Certification metrics
         pendingCerts: pendingCerts.length,
+        totalCertifications: certifications.length,
+        
+        // Consultation metrics
+        todayConsultations: todayConsultations.length,
+        totalConsultations: consultations.length,
+        
+        // Task metrics
         followups: todayTasks.length,
-        highPriority: todayTasks.filter(t => t.priority === "High").length,
+        highPriority: highPriorityTasks,
+        pendingTasks: pendingTasks.length,
+        overdueTasks,
+        
+        // Additional metrics
+        topPerformingSuppliers: suppliers
+          .filter(s => (s.qualityRating || 0) >= 4)
+          .sort((a, b) => (b.qualityRating || 0) - (a.qualityRating || 0))
+          .slice(0, 5),
+        
+        recentSales: sales
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .slice(0, 5)
+          .map(sale => ({
+            id: sale.id,
+            clientName: sale.clientName || 'Unknown Client',
+            gemName: sale.gemName || 'Unknown Gem',
+            totalAmount: sale.totalAmount,
+            saleDate: sale.createdAt,
+            status: sale.status || 'Completed'
+          })),
+        
+        lowStockItems: inventory
+          .filter(item => parseFloat(item.weight) < 1) // Items less than 1 carat
+          .slice(0, 5),
       });
     } catch (error) {
+      console.error("Dashboard metrics error:", error);
       res.status(500).json({ message: "Failed to fetch dashboard metrics" });
     }
   });
@@ -287,13 +390,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/certifications", upload.single("certificateFile"), async (req, res) => {
     try {
-      const data = insertCertificationSchema.parse(req.body);
-      if (req.file) {
-        data.certificateFile = req.file.path;
+      console.log('Received certification data:', req.body);
+      
+      // Validate required fields
+      if (!req.body.lab) {
+        return res.status(400).json({ message: "Lab is required" });
       }
-      const cert = await storage.createCertification(data);
+      
+      // Manual validation and transformation - NO SCHEMA VALIDATION
+      const data = {
+        lab: req.body.lab,
+        stone_id: req.body.stoneId || null,
+        date_sent: req.body.dateSent ? new Date(req.body.dateSent) : null,
+        status: req.body.status || 'Pending',
+        notes: req.body.notes || null,
+        certificate_file: req.file ? req.file.path : null
+      };
+      
+      console.log('Processed certification data:', data);
+      
+      // Direct database call to bypass schema validation
+      const { data: cert, error } = await supabase
+        .from('certifications')
+        .insert(data)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Database error:', error);
+        return res.status(400).json({ message: "Database error", error: error.message });
+      }
+      
       res.status(201).json(cert);
     } catch (error) {
+      console.error('Certification creation error:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
       res.status(400).json({ message: "Invalid data", error: error.message });
     }
   });
@@ -343,10 +474,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/tasks", async (req, res) => {
     try {
+      console.log("Received task data:", req.body);
       const data = insertTaskSchema.parse(req.body);
+      console.log("Parsed task data:", data);
       const task = await storage.createTask(data);
       res.status(201).json(task);
     } catch (error) {
+      console.error("Task creation error:", error);
       res.status(400).json({ message: "Invalid data", error: error.message });
     }
   });
@@ -357,6 +491,228 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(task);
     } catch (error) {
       res.status(400).json({ message: "Failed to update task", error: error.message });
+    }
+  });
+
+  // AI Analysis routes
+  app.post("/api/ai/analyze", async (req, res) => {
+    try {
+      const { query, context } = req.body;
+      
+      if (!query) {
+        return res.status(400).json({ message: "Query is required" });
+      }
+
+      // Fetch all business data
+      const [sales, inventory, clients, suppliers, certifications, consultations, tasks] = await Promise.all([
+        storage.getSales(),
+        storage.getInventory(),
+        storage.getClients(),
+        storage.getSuppliers(),
+        storage.getCertifications(),
+        storage.getConsultations(),
+        storage.getTasks()
+      ]);
+
+      const businessData = {
+        sales,
+        inventory,
+        clients,
+        suppliers,
+        certifications,
+        consultations,
+        tasks
+      };
+
+      const analysis = await geminiService.analyzeBusinessData({
+        query,
+        businessData,
+        context
+      });
+
+      res.json(analysis);
+    } catch (error) {
+      console.error("AI Analysis error:", error);
+      res.status(500).json({ message: "Failed to analyze data with AI" });
+    }
+  });
+
+  app.get("/api/ai/insights", async (req, res) => {
+    try {
+      // Fetch all business data
+      const [sales, inventory, clients, suppliers, certifications, consultations, tasks] = await Promise.all([
+        storage.getSales(),
+        storage.getInventory(),
+        storage.getClients(),
+        storage.getSuppliers(),
+        storage.getCertifications(),
+        storage.getConsultations(),
+        storage.getTasks()
+      ]);
+
+      const businessData = {
+        sales,
+        inventory,
+        clients,
+        suppliers,
+        certifications,
+        consultations,
+        tasks
+      };
+
+      const insights = await geminiService.generateBusinessInsights(businessData);
+      res.json({ insights });
+    } catch (error) {
+      console.error("AI Insights error:", error);
+      res.status(500).json({ message: "Failed to generate insights" });
+    }
+  });
+
+  app.post("/api/ai/recommendations", async (req, res) => {
+    try {
+      const { focusArea } = req.body;
+      
+      if (!focusArea) {
+        return res.status(400).json({ message: "Focus area is required" });
+      }
+
+      // Fetch all business data
+      const [sales, inventory, clients, suppliers, certifications, consultations, tasks] = await Promise.all([
+        storage.getSales(),
+        storage.getInventory(),
+        storage.getClients(),
+        storage.getSuppliers(),
+        storage.getCertifications(),
+        storage.getConsultations(),
+        storage.getTasks()
+      ]);
+
+      const businessData = {
+        sales,
+        inventory,
+        clients,
+        suppliers,
+        certifications,
+        consultations,
+        tasks
+      };
+
+      const recommendations = await geminiService.generateRecommendations(businessData, focusArea);
+      res.json({ recommendations });
+    } catch (error) {
+      console.error("AI Recommendations error:", error);
+      res.status(500).json({ message: "Failed to generate recommendations" });
+    }
+  });
+
+  // Astrological AI routes
+  app.post("/api/astrological/analyze", async (req, res) => {
+    try {
+      const { zodiacSign, birthDate, birthTime, birthPlace, specificConcerns } = req.body;
+      
+      if (!zodiacSign) {
+        return res.status(400).json({ message: "Zodiac sign is required" });
+      }
+
+      const profile = {
+        zodiacSign,
+        birthDate,
+        birthTime,
+        birthPlace,
+        specificConcerns
+      };
+
+      const analysis = await astrologicalAIService.analyzeAstrologicalCompatibility(profile);
+      res.json(analysis);
+    } catch (error) {
+      console.error("Astrological Analysis error:", error);
+      res.status(500).json({ message: "Failed to analyze astrological compatibility" });
+    }
+  });
+
+  app.post("/api/astrological/quick-recommendation", async (req, res) => {
+    try {
+      const { zodiacSign, concern } = req.body;
+      
+      if (!zodiacSign || !concern) {
+        return res.status(400).json({ message: "Zodiac sign and concern are required" });
+      }
+
+      const recommendation = await astrologicalAIService.getQuickRecommendation(zodiacSign, concern);
+      res.json({ recommendation });
+    } catch (error) {
+      console.error("Quick Recommendation error:", error);
+      res.status(500).json({ message: "Failed to get quick recommendation" });
+    }
+  });
+
+  // Task Automation routes
+  app.get("/api/tasks/smart-suggestions", async (req, res) => {
+    try {
+      const smartTasks = await taskAutomationService.generateSmartTasks();
+      res.json({ suggestions: smartTasks });
+    } catch (error) {
+      console.error("Smart task suggestions error:", error);
+      res.status(500).json({ message: "Failed to generate smart task suggestions" });
+    }
+  });
+
+  app.get("/api/tasks/templates", async (req, res) => {
+    try {
+      const templates = await taskAutomationService.getTaskTemplates();
+      res.json({ templates });
+    } catch (error) {
+      console.error("Task templates error:", error);
+      res.status(500).json({ message: "Failed to get task templates" });
+    }
+  });
+
+  app.post("/api/tasks/from-template", async (req, res) => {
+    try {
+      const { templateId, customizations } = req.body;
+      
+      if (!templateId) {
+        return res.status(400).json({ message: "Template ID is required" });
+      }
+
+      const taskData = await taskAutomationService.createTaskFromTemplate(templateId, customizations);
+      
+      // Create the actual task in the database
+      const newTask = await storage.createTask(taskData);
+      res.json({ task: newTask });
+    } catch (error) {
+      console.error("Create task from template error:", error);
+      res.status(500).json({ message: "Failed to create task from template" });
+    }
+  });
+
+  app.get("/api/tasks/automation-rules", async (req, res) => {
+    try {
+      const rules = await taskAutomationService.getAutomationRules();
+      res.json({ rules });
+    } catch (error) {
+      console.error("Automation rules error:", error);
+      res.status(500).json({ message: "Failed to get automation rules" });
+    }
+  });
+
+  app.post("/api/tasks/run-automation", async (req, res) => {
+    try {
+      const triggeredTasks = await taskAutomationService.runAutomationChecks();
+      res.json({ triggeredTasks });
+    } catch (error) {
+      console.error("Run automation error:", error);
+      res.status(500).json({ message: "Failed to run automation checks" });
+    }
+  });
+
+  app.get("/api/tasks/insights", async (req, res) => {
+    try {
+      const insights = await taskAutomationService.getTaskInsights();
+      res.json({ insights });
+    } catch (error) {
+      console.error("Task insights error:", error);
+      res.status(500).json({ message: "Failed to get task insights" });
     }
   });
 
@@ -371,6 +727,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(404).json({ message: "File not found" });
     }
   });
+
+  // Remove phone auth flows
 
   const httpServer = createServer(app);
   return httpServer;

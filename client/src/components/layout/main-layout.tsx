@@ -12,25 +12,27 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const isMobile = useIsMobile();
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-background via-background to-muted/20">
       <Sidebar 
         isOpen={sidebarOpen} 
         onToggle={() => setSidebarOpen(!sidebarOpen)}
         isMobile={isMobile}
       />
       
-      {/* Mobile overlay */}
+      {/* Mobile overlay with blur effect */}
       {isMobile && sidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden transition-all duration-300"
           onClick={() => setSidebarOpen(false)}
         />
       )}
       
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header onSidebarToggle={() => setSidebarOpen(!sidebarOpen)} />
-        <main className="flex-1 overflow-auto">
-          {children}
+        <main className="flex-1 overflow-auto p-6 space-y-6">
+          <div className="max-w-7xl mx-auto">
+            {children}
+          </div>
         </main>
       </div>
     </div>

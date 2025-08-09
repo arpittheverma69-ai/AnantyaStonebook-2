@@ -166,21 +166,21 @@ export default function SaleForm({ sale, onClose }: SaleFormProps) {
             name="clientId"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Client</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select client" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.name} ({client.clientType})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                              <FormLabel>Client</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value || undefined}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select client" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {clients.map((client) => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.name} ({client.clientType})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
                 <FormMessage />
               </FormItem>
             )}
@@ -191,21 +191,21 @@ export default function SaleForm({ sale, onClose }: SaleFormProps) {
             name="stoneId"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Stone</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select stone" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {availableStones.map((stone) => (
-                      <SelectItem key={stone.id} value={stone.id}>
-                        {stone.type} - {stone.carat} Carat ({stone.stoneId})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                              <FormLabel>Stone</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value || undefined}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select stone" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {availableStones.map((stone) => (
+                    <SelectItem key={stone.id} value={stone.id}>
+                      {stone.type} - {stone.carat} Carat ({stone.stoneId})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
                 <FormMessage />
               </FormItem>
             )}
@@ -220,7 +220,7 @@ export default function SaleForm({ sale, onClose }: SaleFormProps) {
               <FormItem>
                 <FormLabel>Quantity</FormLabel>
                 <FormControl>
-                  <Input type="number" min="1" {...field} onChange={(e) => field.onChange(parseInt(e.target.value))} />
+                  <Input type="number" min="1" {...field} value={field.value || ""} onChange={(e) => field.onChange(parseInt(e.target.value))} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -262,7 +262,7 @@ export default function SaleForm({ sale, onClose }: SaleFormProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Payment Status</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <Select onValueChange={field.onChange} defaultValue={field.value || undefined}>
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Select payment status" />
@@ -286,7 +286,7 @@ export default function SaleForm({ sale, onClose }: SaleFormProps) {
             <FormItem>
               <FormLabel>Notes</FormLabel>
               <FormControl>
-                <Textarea {...field} rows={3} />
+                <Textarea {...field} value={field.value || ""} rows={3} />
               </FormControl>
               <FormMessage />
             </FormItem>

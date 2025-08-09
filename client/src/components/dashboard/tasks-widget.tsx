@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { type Task } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
-import { Link } from "wouter";
+import { Link } from "react-router-dom";
 
 export default function TasksWidget() {
   const queryClient = useQueryClient();
@@ -23,8 +23,16 @@ export default function TasksWidget() {
     },
   });
 
+  // Filter tasks for today
+  const today = new Date();
+  const todayTasks = tasks.filter(task => {
+    if (!task.dueDate) return false;
+    const taskDate = new Date(task.dueDate);
+    return taskDate.toDateString() === today.toDateString();
+  });
+
   // Show only first 3 tasks
-  const displayTasks = tasks.slice(0, 3);
+  const displayTasks = todayTasks.slice(0, 3);
 
   const handleTaskToggle = (id: string, completed: boolean) => {
     updateTaskMutation.mutate({ id, completed });
@@ -57,7 +65,7 @@ export default function TasksWidget() {
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg font-semibold text-gray-900">Today's Tasks</CardTitle>
-          <Link href="/tasks">
+          <Link to="/tasks">
             <Button variant="link" className="text-primary">View All Tasks</Button>
           </Link>
         </div>

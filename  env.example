@@ -1,0 +1,7 @@
+# Supabase Configuration
+VITE_SUPABASE_URL=https://luaoeowqcvnbjcpascnk.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx1YW9lb3dxY3ZuYmpjcGFzY25rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQzOTgxMTEsImV4cCI6MjA2OTk3NDExMX0.Gf8dsa6oxudXZ8AB2mpz_FVTFx2y8wyD6TF7dyAWBG8
+
+# Database URL (for Drizzle migrations)
+# Replace [YOUR-PASSWORD] with the password you set when creating the Supabase project
+DATABASE_URL=postgresql://postgres:NFA#2if$hS4#7v6@db.luaoeowqcvnbjcpascnk.supabase.co:5432/postgres 

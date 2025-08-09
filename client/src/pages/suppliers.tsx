@@ -11,37 +11,58 @@ import { Plus, Search, Edit, Trash2, Truck } from "lucide-react";
 import SupplierForm from "@/components/forms/supplier-form";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { supplierService } from "@/lib/database";
+import React from "react";
 
 export default function Suppliers() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
-  const queryClient = useQueryClient();
+  const [editingSupplier, setEditingSupplier] = useState<any | null>(null);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  const { data: suppliers = [], isLoading } = useQuery<Supplier[]>({
-    queryKey: ["/api/suppliers"],
-  });
+  // Utility: Map snake_case from DB to camelCase for UI
+  function mapSupplierFromDb(item: any) {
+    return {
+      ...item,
+      gemstoneTypes: item.gemstone_types,
+      certificationOptions: item.certification_options,
+      businessName: item.business_name,
+      businessAddress: item.business_address,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at,
+      tags: item.tags,
+      arrivalDate: item.arrival_date,
+      departureDate: item.departure_date,
+      city: item.city,
+      state: item.state,
+      gstNumber: item.gst_number,
+      landmark: item.landmark,
+      totalAmount: item.total_amount,
+      totalSold: item.total_sold,
+      qualityRating: item.quality_rating,
+      reliabilityScore: item.reliability_score,
+      lastTransactionDate: item.last_transaction_date,
+    };
+  }
+  // Utility: Map camelCase from UI to snake_case for DB
 
-  const deleteSupplierMutation = useMutation({
-    mutationFn: async (id: string) => {
-      return apiRequest("DELETE", `/api/suppliers/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/suppliers"] });
-      toast({
-        title: "Success",
-        description: "Supplier deleted successfully",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to delete supplier",
-        variant: "destructive",
-      });
-    },
-  });
+
+  // Load suppliers from Supabase
+  async function loadSuppliers() {
+    setLoading(true);
+    try {
+      const data = await supplierService.getAll();
+      setSuppliers(data.map(mapSupplierFromDb));
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to load suppliers", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+  // Load on mount
+  React.useEffect(() => { loadSuppliers(); }, []);
 
   const filteredSuppliers = suppliers.filter(supplier =>
     supplier.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -50,14 +71,50 @@ export default function Suppliers() {
     (supplier.phone && supplier.phone.includes(searchQuery))
   );
 
-  const handleEdit = (supplier: Supplier) => {
+  // Add supplier
+  const handleAddSupplier = async (data: any) => {
+    try {
+      const created = await supplierService.create(data);
+      setSuppliers(prev => [mapSupplierFromDb(created), ...prev]);
+      setIsFormOpen(false);
+      toast({ title: "Success", description: "Supplier added successfully" });
+    } catch (error) {
+      console.error("Error adding supplier:", error);
+      toast({ title: "Error", description: "Failed to add supplier", variant: "destructive" });
+    }
+  };
+
+  // Edit supplier
+  const handleEdit = (supplier: any) => {
     setEditingSupplier(supplier);
     setIsFormOpen(true);
   };
+  const handleUpdateSupplier = async (data: any) => {
+    if (!editingSupplier) return;
+    try {
+      const mergedData = { ...editingSupplier, ...data };
+      const updated = await supplierService.update(editingSupplier.id, mergedData);
+      
+      setSuppliers(prev => prev.map(s => s.id === editingSupplier.id ? mapSupplierFromDb(updated) : s));
+      setEditingSupplier(null);
+      setIsFormOpen(false);
+      toast({ title: "Success", description: "Supplier updated successfully" });
+    } catch (error) {
+      console.error("Error updating supplier:", error);
+      toast({ title: "Error", description: "Failed to update supplier", variant: "destructive" });
+    }
+  };
 
-  const handleDelete = (id: string) => {
+  // Delete supplier
+  const handleDelete = async (id: string) => {
     if (confirm("Are you sure you want to delete this supplier?")) {
-      deleteSupplierMutation.mutate(id);
+      try {
+        await supplierService.delete(id);
+        setSuppliers(prev => prev.filter(supplier => supplier.id !== id));
+        toast({ title: "Success", description: "Supplier deleted successfully" });
+      } catch (error) {
+        toast({ title: "Error", description: "Failed to delete supplier", variant: "destructive" });
+      }
     }
   };
 
@@ -77,7 +134,7 @@ export default function Suppliers() {
     }
   };
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="p-6">
         <div className="animate-pulse space-y-4">
@@ -102,7 +159,7 @@ export default function Suppliers() {
               <span>Add Supplier</span>
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {editingSupplier ? "Edit Supplier" : "Add New Supplier"}
@@ -111,9 +168,11 @@ export default function Suppliers() {
             <SupplierForm 
               supplier={editingSupplier} 
               onClose={handleFormClose}
+              onSubmit={editingSupplier ? handleUpdateSupplier : handleAddSupplier}
             />
           </DialogContent>
         </Dialog>
+        
       </div>
 
       <Card>

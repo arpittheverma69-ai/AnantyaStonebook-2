@@ -74,7 +74,8 @@ export default function TaskForm({ task, onClose }: TaskFormProps) {
       });
       onClose();
     },
-    onError: () => {
+    onError: (error) => {
+      console.error("Task creation error:", error);
       toast({
         title: "Error",
         description: "Failed to create task",
@@ -105,10 +106,18 @@ export default function TaskForm({ task, onClose }: TaskFormProps) {
   });
 
   const onSubmit = (data: InsertTask) => {
+    // Convert date string to Date object if it exists
+    const processedData = {
+      ...data,
+      dueDate: data.dueDate ? new Date(data.dueDate as string) : undefined
+    };
+    
+    console.log("Form data being sent:", processedData);
+    
     if (task) {
-      updateMutation.mutate(data);
+      updateMutation.mutate(processedData);
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(processedData);
     }
   };
 
@@ -257,7 +266,7 @@ export default function TaskForm({ task, onClose }: TaskFormProps) {
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
                     <SelectItem value="Client">Client</SelectItem>
                     <SelectItem value="Supplier">Supplier</SelectItem>
                     <SelectItem value="Stone">Stone</SelectItem>

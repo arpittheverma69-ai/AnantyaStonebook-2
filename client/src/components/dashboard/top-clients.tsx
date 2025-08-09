@@ -2,14 +2,39 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { type Client } from "@shared/schema";
+import { type Sale } from "@shared/schema";
+
+interface ClientWithRevenue extends Client {
+  totalRevenue: number;
+  totalPurchases: number;
+}
 
 export default function TopClients() {
   const { data: clients = [] } = useQuery<Client[]>({
     queryKey: ["/api/clients"],
   });
 
-  // For demo purposes, show first 3 clients
-  const topClients = clients.slice(0, 3);
+  const { data: sales = [] } = useQuery<Sale[]>({
+    queryKey: ["/api/sales"],
+  });
+
+  // Calculate revenue for each client
+  const clientsWithRevenue: ClientWithRevenue[] = clients.map(client => {
+    const clientSales = sales.filter(sale => sale.clientId === client.id);
+    const totalRevenue = clientSales.reduce((sum, sale) => sum + parseFloat(sale.totalAmount), 0);
+    const totalPurchases = clientSales.length;
+    
+    return {
+      ...client,
+      totalRevenue,
+      totalPurchases
+    };
+  });
+
+  // Sort by revenue and take top 3
+  const topClients = clientsWithRevenue
+    .sort((a, b) => b.totalRevenue - a.totalRevenue)
+    .slice(0, 3);
 
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
@@ -26,6 +51,14 @@ export default function TopClients() {
       default:
         return 'from-gray-400 to-gray-600';
     }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0,
+    }).format(amount);
   };
 
   return (
@@ -58,8 +91,8 @@ export default function TopClients() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="font-semibold text-gray-900">₹0</p>
-                  <p className="text-sm text-green-600">+0%</p>
+                  <p className="font-semibold text-gray-900">{formatCurrency(client.totalRevenue)}</p>
+                  <p className="text-sm text-green-600">{client.totalPurchases} purchases</p>
                 </div>
               </div>
             ))

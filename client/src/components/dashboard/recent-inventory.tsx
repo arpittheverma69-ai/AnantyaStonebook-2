@@ -4,22 +4,24 @@ import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import { type Inventory } from "@shared/schema";
 import { Gem } from "lucide-react";
-import { Link } from "wouter";
+import { Link } from "react-router-dom";
 
 export default function RecentInventory() {
   const { data: inventory = [] } = useQuery<Inventory[]>({
     queryKey: ["/api/inventory"],
   });
 
-  // Show most recent 3 items
-  const recentItems = inventory.slice(0, 3);
+  // Show most recent 3 items, sorted by creation date
+  const recentItems = inventory
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 3);
 
   const formatCurrency = (amount: string) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
       maximumFractionDigits: 0,
-    }).format(parseFloat(amount));
+    }).format(parseFloat(amount) || 0);
   };
 
   const getStoneColor = (type: string) => {
@@ -32,6 +34,10 @@ export default function RecentInventory() {
         return 'from-green-400 to-emerald-500';
       case 'yellow sapphire':
         return 'from-yellow-400 to-orange-500';
+      case 'diamond':
+        return 'from-gray-400 to-gray-500';
+      case 'pearl':
+        return 'from-pink-400 to-rose-500';
       default:
         return 'from-gray-400 to-gray-500';
     }
@@ -42,7 +48,7 @@ export default function RecentInventory() {
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg font-semibold text-gray-900">Recent Inventory</CardTitle>
-          <Link href="/inventory">
+          <Link to="/inventory">
             <Button variant="link" className="text-primary">Manage Inventory</Button>
           </Link>
         </div>
@@ -67,17 +73,17 @@ export default function RecentInventory() {
                       <span>{item.carat} Carat</span>
                       <span>{item.origin}</span>
                       <Badge 
-                        variant={item.certified ? "default" : "secondary"}
-                        className={item.certified ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}
+                        variant={item.isAvailable ? "default" : "secondary"}
+                        className={item.isAvailable ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}
                       >
-                        {item.certified ? "Certified" : "Pending Cert"}
+                        {item.isAvailable ? "Available" : "Sold"}
                       </Badge>
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
                   <p className="font-semibold text-gray-900">{formatCurrency(item.sellingPrice)}</p>
-                  <p className="text-sm text-gray-500">{item.stoneId}</p>
+                  <p className="text-sm text-gray-500">{item.gemId}</p>
                 </div>
               </div>
             ))
