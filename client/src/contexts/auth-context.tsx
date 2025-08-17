@@ -20,7 +20,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Initial session fetch
     supabase.auth.getSession().then(({ data }) => {
-      const currentUser = data.session?.user ?? null;
+      const currentUser = (() => {
+        const u = data.session?.user ?? null;
+        // Overlay locally stored metadata so sidebar/profile show your custom name immediately
+        try {
+          const stored = localStorage.getItem("anantya-user-meta");
+          if (u && stored) {
+            const meta = JSON.parse(stored);
+            return { ...u, user_metadata: { ...(u.user_metadata || {}), ...meta } };
+          }
+        } catch {}
+        return u;
+      })();
       setUser(currentUser);
       setIsAuthenticated(!!currentUser);
     });

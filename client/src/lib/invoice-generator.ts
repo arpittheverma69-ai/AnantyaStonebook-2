@@ -27,160 +27,215 @@ export interface InvoiceData {
   paymentStatus: string;
   waitingPeriod?: number;
   isTrustworthy?: boolean;
+  // Optional disclosures to print (e.g., treatments)
+  treatmentDisclosures?: string[];
 }
 
 export const generateInvoicePDF = (data: InvoiceData): jsPDF => {
   const doc = new jsPDF();
+
+  // Helper: INR currency formatter with safe symbol
+  // Note: Default jsPDF fonts do not include the ₹ glyph, which renders as ¹.
+  // Using "Rs." avoids the glyph issue without embedding custom fonts.
+  const formatINR = (amount: number): string => `Rs. ${amount.toLocaleString('en-IN')}`;
+
+  // Page layout constants
+  const page = {
+    width: doc.internal.pageSize.getWidth(),
+    height: doc.internal.pageSize.getHeight(),
+    marginLeft: 20,
+    marginRight: 20,
+  };
+  const rightX = page.width - page.marginRight; // Right-aligned anchor
   
   // Company Header
-  doc.setFontSize(24);
+  doc.setFontSize(22);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(59, 130, 246); // Blue color
-  doc.text('ANANTYA STONEWORKS', 105, 20, { align: 'center' });
+  doc.setTextColor(0, 0, 0);
+  doc.text('ANANTYA STONEWORKS', page.width / 2, 18, { align: 'center' });
   
-  doc.setFontSize(12);
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100, 100, 100);
-  doc.text('Premium Gemstone Solutions', 105, 30, { align: 'center' });
+  doc.setTextColor(90, 90, 90);
+  doc.text('Premium Gemstone Solutions', page.width / 2, 26, { align: 'center' });
   
-  // Company Details
+  // Company Details (left)
   doc.setFontSize(10);
-  doc.text('Address: 123 Gemstone Plaza, Jewelry District', 20, 45);
-  doc.text('Mumbai, Maharashtra - 400001', 20, 52);
-  doc.text('Phone: +91 98765 43210 | Email: info@anantya.com', 20, 59);
-  doc.text('GST: 27AABCA1234Z1Z5', 20, 66);
+  doc.setTextColor(0, 0, 0);
+  let y = 40;
+  doc.text('Address: 123 Gemstone Plaza, Jewelry District', page.marginLeft, y);
+  y += 7;
+  doc.text('Mumbai, Maharashtra - 400001', page.marginLeft, y);
+  y += 7;
+  doc.text('Phone: +91 98765 43210 | Email: info@anantya.com', page.marginLeft, y);
+  y += 7;
+  doc.text('GST: 27AABCA1234Z1Z5', page.marginLeft, y);
   
-  // Invoice Details
+  // Invoice Details (right block)
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(0, 0, 0);
-  doc.text('INVOICE', 150, 45);
-  
+  doc.text('INVOICE', rightX, 40, { align: 'right' });
+
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Invoice #: ${data.invoiceNumber}`, 150, 55);
-  doc.text(`Date: ${data.date}`, 150, 62);
+  doc.text(`Invoice #: ${data.invoiceNumber}`, rightX, 50, { align: 'right' });
+  doc.text(`Date: ${data.date}`, rightX, 57, { align: 'right' });
   if (data.dueDate) {
-    doc.text(`Due Date: ${data.dueDate}`, 150, 69);
+    doc.text(`Due Date: ${data.dueDate}`, rightX, 64, { align: 'right' });
   }
   
   // Client Information
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text('Bill To:', 20, 85);
-  
+  doc.text('Bill To:', page.marginLeft, 82);
+
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(data.clientName, 20, 95);
+  let billToY = 92;
+  doc.text(data.clientName, page.marginLeft, billToY);
+  billToY += 7;
   if (data.firmName) {
-    doc.text(data.firmName, 20, 102);
+    doc.text(data.firmName, page.marginLeft, billToY, { maxWidth: 110 });
+    billToY += 7;
   }
   if (data.address) {
-    doc.text(data.address, 20, 109);
+    doc.text(data.address, page.marginLeft, billToY, { maxWidth: 110 });
+    billToY += 7;
   }
   if (data.phoneNumber) {
-    doc.text(`Phone: ${data.phoneNumber}`, 20, 116);
+    doc.text(`Phone: ${data.phoneNumber}`, page.marginLeft, billToY);
+    billToY += 7;
   }
   if (data.gstNumber) {
-    doc.text(`GST: ${data.gstNumber}`, 20, 123);
+    doc.text(`GST: ${data.gstNumber}`, page.marginLeft, billToY);
+    billToY += 7;
   }
   
-  // Payment Status
+  // Payment Status (right)
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
-  const statusColor = data.paymentStatus === 'Paid' ? [34, 197, 94] : 
+  const statusColor = data.paymentStatus === 'Paid' ? [34, 197, 94] :
                      data.paymentStatus === 'Partial' ? [234, 179, 8] : [239, 68, 68];
   doc.setTextColor(statusColor[0], statusColor[1], statusColor[2]);
-  doc.text(`Status: ${data.paymentStatus}`, 150, 95);
-  
+  doc.text(`Status: ${data.paymentStatus}`, rightX, 82, { align: 'right' });
+
+  doc.setTextColor(0, 0, 0);
   if (data.waitingPeriod && data.paymentStatus !== 'Paid') {
-    doc.text(`Waiting Period: ${data.waitingPeriod} days`, 150, 102);
+    doc.text(`Waiting Period: ${data.waitingPeriod} days`, rightX, 90, { align: 'right' });
   }
-  
+
   if (data.isTrustworthy !== undefined) {
     const trustText = data.isTrustworthy ? 'Trustworthy Client' : 'Requires Follow-up';
     const trustColor = data.isTrustworthy ? [34, 197, 94] : [239, 68, 68];
     doc.setTextColor(trustColor[0], trustColor[1], trustColor[2]);
-    doc.text(trustText, 150, 109);
+    doc.text(trustText, rightX, 98, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
   }
   
   // Items Table
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(0, 0, 0);
-  doc.text('Items', 20, 145);
-  
+  const itemsStartY = Math.max(billToY + 16, 118);
   const tableData = data.items.map(item => [
     item.stoneId,
     item.stoneName,
     `${item.carat.toFixed(2)} ct`,
-    `₹${item.pricePerCarat.toLocaleString('en-IN')}/ct`,
-    `₹${item.totalPrice.toLocaleString('en-IN')}`
+    `${formatINR(item.pricePerCarat)}/ct`,
+    `${formatINR(item.totalPrice)}`
   ]);
-  
+
   autoTable(doc, {
-    startY: 150,
+    startY: itemsStartY,
+    margin: { left: page.marginLeft, right: page.marginRight },
     head: [['Stone ID', 'Gemstone', 'Carat', 'Price/Carat', 'Total']],
     body: tableData,
     theme: 'grid',
     headStyles: {
-      fillColor: [59, 130, 246],
-      textColor: 255,
-      fontStyle: 'bold'
+      fillColor: [240, 240, 240],
+      textColor: [0, 0, 0],
+      fontStyle: 'bold',
+      halign: 'left',
+    },
+    bodyStyles: {
+      fontSize: 9,
+      cellPadding: 3,
+      valign: 'middle',
     },
     styles: {
-      fontSize: 9,
-      cellPadding: 3
+      overflow: 'linebreak',
     },
     columnStyles: {
-      0: { cellWidth: 25 },
-      1: { cellWidth: 40 },
-      2: { cellWidth: 25 },
-      3: { cellWidth: 35 },
-      4: { cellWidth: 30 }
-    }
+      0: { cellWidth: 38 }, // Stone ID
+      1: { cellWidth: 58 }, // Gemstone
+      2: { cellWidth: 25, halign: 'right' }, // Carat
+      3: { cellWidth: 35, halign: 'right' }, // Price/Carat
+      4: { cellWidth: 35, halign: 'right' }, // Total
+    },
+    didDrawPage: (dataCtx) => {
+      // Table title
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0, 0, 0);
+      doc.text('Items', page.marginLeft, itemsStartY - 6);
+    },
   });
   
-  // Summary
-  const finalY = (doc as any).lastAutoTable.finalY + 10;
-  
+  // Summary / Totals (right aligned)
+  const lastTableY = ((doc as any).lastAutoTable && (doc as any).lastAutoTable.finalY) || itemsStartY;
+  let currentY = lastTableY + 12;
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(0, 0, 0);
-  
-  let currentY = finalY;
-  doc.text(`Subtotal: ₹${data.subtotal.toLocaleString('en-IN')}`, 150, currentY);
+
+  doc.text(`Subtotal: ${formatINR(data.subtotal)}`, rightX, currentY, { align: 'right' });
   currentY += 7;
-  
+
   if (data.discount && data.discount > 0) {
-    doc.text(`Discount: -₹${data.discount.toLocaleString('en-IN')}`, 150, currentY);
+    doc.text(`Discount: -${formatINR(data.discount)}`, rightX, currentY, { align: 'right' });
     currentY += 7;
   }
-  
+
   if (data.isOutOfState && data.igst) {
-    doc.text(`IGST (3%): ₹${data.igst.toLocaleString('en-IN')}`, 150, currentY);
+    doc.text(`IGST (3%): ${formatINR(data.igst)}`, rightX, currentY, { align: 'right' });
+    currentY += 7;
   } else {
-    if (data.cgst) {
-      doc.text(`CGST (1.5%): ₹${data.cgst.toLocaleString('en-IN')}`, 150, currentY);
+    if (typeof data.cgst === 'number') {
+      doc.text(`CGST (1.5%): ${formatINR(data.cgst)}`, rightX, currentY, { align: 'right' });
       currentY += 7;
     }
-    if (data.sgst) {
-      doc.text(`SGST (1.5%): ₹${data.sgst.toLocaleString('en-IN')}`, 150, currentY);
+    if (typeof data.sgst === 'number') {
+      doc.text(`SGST (1.5%): ${formatINR(data.sgst)}`, rightX, currentY, { align: 'right' });
       currentY += 7;
     }
   }
-  
+
   // Total
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text(`Total: ₹${data.totalAmount.toLocaleString('en-IN')}`, 150, currentY + 10);
+  doc.text(`Total: ${formatINR(data.totalAmount)}`, rightX, currentY + 10, { align: 'right' });
+  currentY += 20;
+
+  // Disclosures
+  if (data.treatmentDisclosures && data.treatmentDisclosures.length > 0) {
+    const blockY = Math.max(currentY, ((doc as any).lastAutoTable?.finalY || itemsStartY) + 20);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 0, 0);
+    doc.text('Disclosures', page.marginLeft, blockY);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    let dy = blockY + 6;
+    data.treatmentDisclosures.forEach((line) => {
+      doc.text(`• ${line}`, page.marginLeft + 2, dy, { maxWidth: page.width - page.marginLeft - page.marginRight - 4 });
+      dy += 5;
+    });
+  }
   
   // Footer
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100, 100, 100);
-  doc.text('Thank you for your business!', 105, 270, { align: 'center' });
-  doc.text('For any queries, please contact us at info@anantya.com', 105, 275, { align: 'center' });
+  doc.setTextColor(120, 120, 120);
+  doc.text('Thank you for your business!', page.width / 2, page.height - 20, { align: 'center' });
+  doc.text('For any queries, please contact us at info@anantya.com', page.width / 2, page.height - 15, { align: 'center' });
   
   return doc;
 };
@@ -195,7 +250,7 @@ export const shareInvoice = async (data: InvoiceData): Promise<string> => {
   const doc = generateInvoicePDF(data);
   const pdfBlob = doc.output('blob');
   
-  if (navigator.share && navigator.canShare) {
+  if (navigator.share && navigator.canShare && navigator.canShare({})) {
     const file = new File([pdfBlob], `invoice-${data.invoiceNumber}.pdf`, {
       type: 'application/pdf',
     });

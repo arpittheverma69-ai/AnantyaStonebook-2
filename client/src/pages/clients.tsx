@@ -234,37 +234,17 @@ export default function Clients() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header Section */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
-            Client Management
-          </h1>
-          <p className="text-muted-foreground text-lg">
-            Manage your customer relationships and track business performance
-          </p>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Client Management</h1>
+          <p className="text-muted-foreground text-sm md:text-base">Manage your client relationships and track their preferences</p>
         </div>
-        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <DialogTrigger asChild>
-            <Button className="btn-modern bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Client
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-2xl font-bold">
-                {editingClient ? "Edit Client" : "Add New Client"}
-              </DialogTitle>
-            </DialogHeader>
-            <ClientForm 
-              client={editingClient} 
-              onClose={handleFormClose}
-              onSubmit={editingClient ? handleUpdateClient : handleAddClient}
-            />
-          </DialogContent>
-        </Dialog>
+        <Button onClick={() => setIsFormOpen(true)} className="btn-modern bg-gradient-to-r from-primary to-purple-600 w-full sm:w-auto">
+          <Plus className="h-4 w-4 mr-2" />
+          Add Client
+        </Button>
       </div>
 
       {/* Filters and Search */}

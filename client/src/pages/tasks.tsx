@@ -46,6 +46,7 @@ import {
   Info
 } from "lucide-react";
 import TaskForm from "@/components/forms/task-form";
+import { ensureGoogleCalendarAuth, isGoogleConnected, createGoogleCalendarEvent } from "@/lib/google-calendar";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -82,10 +83,71 @@ export default function Tasks() {
   const [activeTimer, setActiveTimer] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [calendarConnected, setCalendarConnected] = useState<boolean>(isGoogleConnected());
 
   const { data: tasks = [], isLoading } = useQuery<Task[]>({
     queryKey: ["/api/tasks"],
   });
+
+  const connectCalendar = async () => {
+    try {
+      const ok = await ensureGoogleCalendarAuth();
+      setCalendarConnected(ok);
+      toast({ title: ok ? "Google Calendar Connected" : "Calendar Connection Failed", description: ok ? "Tasks with due dates can be added to your calendar." : "Please try again." });
+    } catch (e: any) {
+      toast({ title: "Calendar Error", description: e?.message || "Failed to connect", variant: "destructive" });
+    }
+  };
+
+  const addTaskToCalendar = async (task: Task) => {
+    try {
+      if (!task.dueDate) {
+        toast({ title: "No due date", description: "Set a due date to add to calendar", variant: "destructive" });
+        return;
+      }
+      const ok = await ensureGoogleCalendarAuth();
+      if (!ok) {
+        toast({ title: "Calendar not connected", description: "Please connect Google Calendar first", variant: "destructive" });
+        return;
+      }
+      const start = new Date(task.dueDate);
+      const end = new Date(new Date(task.dueDate).getTime() + 60 * 60 * 1000);
+      await createGoogleCalendarEvent({
+        summary: task.title,
+        description: task.description || undefined,
+        start,
+        end,
+      });
+      toast({ title: "Added to Calendar", description: "Event created in your Google Calendar" });
+    } catch (e: any) {
+      toast({ title: "Calendar Error", description: e?.message || "Failed to create event", variant: "destructive" });
+    }
+  };
+
+  const syncDueTasksToCalendar = async () => {
+    try {
+      if (!filteredTasks.some(t => t.dueDate)) {
+        toast({ title: "No due dates", description: "Add due dates to tasks first", variant: "destructive" });
+        return;
+      }
+      const ok = await ensureGoogleCalendarAuth();
+      if (!ok) {
+        toast({ title: "Calendar not connected", description: "Please connect Google Calendar first", variant: "destructive" });
+        return;
+      }
+      let created = 0;
+      for (const t of filteredTasks) {
+        if (!t.dueDate) continue;
+        const start = new Date(t.dueDate);
+        const end = new Date(start.getTime() + 60 * 60 * 1000);
+        await createGoogleCalendarEvent({ summary: t.title, description: t.description || undefined, start, end });
+        created += 1;
+      }
+      toast({ title: "Sync complete", description: `${created} event(s) added to your Google Calendar` });
+    } catch (e: any) {
+      toast({ title: "Calendar Sync Error", description: e?.message || "Failed to sync tasks", variant: "destructive" });
+    }
+  };
 
   // AI Task Suggestions
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
@@ -158,6 +220,12 @@ export default function Tasks() {
     return `${hours}h ${minutes}m`;
   };
 
+  // Hoisted helper so it's available for analytics below
+  function isOverdue(dueDate: string | Date | null) {
+    if (!dueDate) return false;
+    return new Date(dueDate) < new Date() && !tasks.find(t => t.dueDate === dueDate)?.completed;
+  }
+
   // Analytics Calculations
   const calculateAnalytics = (): TaskAnalytics => {
     const total = tasks.length;
@@ -191,7 +259,7 @@ export default function Tasks() {
 
   const updateTaskMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<Task> }) => {
-      return apiRequest("PATCH", `/api/tasks/${id}`, data);
+      return apiRequest(`/api/tasks/${id}`, { method: "PATCH", body: data });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
@@ -211,7 +279,7 @@ export default function Tasks() {
 
   const deleteTaskMutation = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest("DELETE", `/api/tasks/${id}`);
+      return apiRequest(`/api/tasks/${id}`, { method: "DELETE" });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
@@ -296,11 +364,6 @@ export default function Tasks() {
     return new Date(date).toLocaleString('en-IN');
   };
 
-  const isOverdue = (dueDate: string | Date | null) => {
-    if (!dueDate) return false;
-    return new Date(dueDate) < new Date() && !tasks.find(t => t.dueDate === dueDate)?.completed;
-  };
-
   const exportTasks = () => {
     const csvContent = [
       ['Title', 'Description', 'Priority', 'Status', 'Due Date', 'Related To', 'Completed'],
@@ -336,41 +399,18 @@ export default function Tasks() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Enhanced Task Management</h1>
-          <p className="text-gray-600">AI-powered task organization with time tracking, analytics & automation</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Task Management</h1>
+          <p className="text-muted-foreground text-sm md:text-base">Organize your tasks, track time, and boost productivity</p>
         </div>
-        <div className="flex items-center space-x-3">
-          <Button variant="outline" onClick={generateAISuggestions} disabled={isGeneratingSuggestions}>
-            <Brain className="h-4 w-4 mr-2" />
-            {isGeneratingSuggestions ? 'Generating...' : 'AI Suggestions'}
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+          <Button onClick={() => setIsFormOpen(true)} className="btn-modern bg-gradient-to-r from-primary to-purple-600 w-full sm:w-auto">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Task
           </Button>
-          <Button variant="outline" onClick={exportTasks}>
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
-          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-            <DialogTrigger asChild>
-              <Button className="flex items-center space-x-2">
-                <Plus className="h-4 w-4" />
-                <span>Add Task</span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingTask ? "Edit Task" : "Create New Task"}
-                </DialogTitle>
-              </DialogHeader>
-              <TaskForm 
-                task={editingTask} 
-                onClose={handleFormClose}
-              />
-            </DialogContent>
-          </Dialog>
         </div>
       </div>
 
@@ -623,6 +663,15 @@ export default function Tasks() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center space-x-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => addTaskToCalendar(task)}
+                                disabled={!task.dueDate}
+                                title={task.dueDate ? 'Add to Google Calendar' : 'Set due date first'}
+                              >
+                                <Calendar className="h-4 w-4" />
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"

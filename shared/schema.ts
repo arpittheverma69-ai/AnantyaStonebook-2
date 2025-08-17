@@ -27,6 +27,11 @@ export const inventory = pgTable("inventory", {
   packageType: text("package_type"), // Velvet, Leatherette
   notes: text("notes"),
   tags: text("tags").array().default([]), // Premium, Budget, High-Demand
+  // Inventory depth extended fields
+  treatments: jsonb("treatments"), // { heat: boolean, oil: boolean, diffusion: boolean, other: string }
+  discloseTreatments: boolean("disclose_treatments").default(false),
+  media: jsonb("media"), // [{ url, type, meta: { lighting, angle, caption } }]
+  reorderRules: jsonb("reorder_rules"), // { type, grade, origin, minStock, reorderQty, preferredSupplierId }
   createdAt: timestamp("created_at").default(sql`now()`),
   updatedAt: timestamp("updated_at").default(sql`now()`),
 });
@@ -179,6 +184,17 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   role: text("role").notNull().default("user"), // admin, user
+  full_name: text("full_name"),
+  phone: text("phone"),
+  address: text("address"),
+  city: text("city"),
+  state: text("state"),
+  business_name: text("business_name"),
+  specialization: text("specialization"),
+  experience: text("experience"),
+  bio: text("bio"),
+  avatar: text("avatar"),
+  preferences: jsonb("preferences"),
   createdAt: timestamp("created_at").default(sql`now()`),
   updatedAt: timestamp("updated_at").default(sql`now()`),
 });

@@ -27,13 +27,18 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Utility functions to convert between camelCase and snake_case
+// Includes special-case mapping for legacy column names that differ from camelCase expectations
 const toSnakeCase = (obj: any): any => {
   const result: any = {};
   for (const key in obj) {
-    if (obj.hasOwnProperty(key)) {
-      const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-      result[snakeKey] = obj[key];
+    if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
+    // Special-case: our DB uses 'related_to_type' but app uses 'relatedType'
+    if (key === 'relatedType') {
+      result['related_to_type'] = obj[key];
+      continue;
     }
+    const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+    result[snakeKey] = obj[key];
   }
   return result;
 };
@@ -41,13 +46,32 @@ const toSnakeCase = (obj: any): any => {
 const fromSnakeCase = (obj: any): any => {
   const result: any = {};
   for (const key in obj) {
-    if (obj.hasOwnProperty(key)) {
-      const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
-      result[camelKey] = obj[key];
+    if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
+    if (key === 'related_to_type') {
+      result['relatedType'] = obj[key];
+      continue;
     }
+    const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+    result[camelKey] = obj[key];
   }
   return result;
 };
+
+// Derive completed boolean from status when DB lacks a dedicated column
+function withDerivedCompleted<T extends { status?: string | null }>(row: T): T & { completed?: boolean } {
+  const status = row.status || '';
+  const completed = /^(completed|done)$/i.test(status);
+  return { ...row, completed };
+}
+
+function normalizeTaskForDb(task: any): any {
+  if (task && typeof task.completed === 'boolean') {
+    const status = task.completed ? 'Completed' : (task.status || 'Pending');
+    const { completed, ...rest } = task;
+    return { ...rest, status };
+  }
+  return task;
+}
 
 export class SupabaseStorage implements IStorage {
   // Users
@@ -522,7 +546,7 @@ export class SupabaseStorage implements IStorage {
       .order('created_at', { ascending: false });
     
     if (error) throw new Error(`Failed to fetch tasks: ${error.message}`);
-    return (data || []).map(fromSnakeCase) as Task[];
+    return (data || []).map((r) => withDerivedCompleted(fromSnakeCase(r) as Task));
   }
 
   async getTask(id: string): Promise<Task | undefined> {
@@ -533,13 +557,14 @@ export class SupabaseStorage implements IStorage {
       .single();
     
     if (error || !data) return undefined;
-    return fromSnakeCase(data) as Task;
+    return withDerivedCompleted(fromSnakeCase(data) as Task);
   }
 
   async createTask(task: InsertTask): Promise<Task> {
     const id = randomUUID();
     const now = new Date();
-    const newTask = { ...task, id, createdAt: now, updatedAt: now };
+    const normalized = normalizeTaskForDb(task);
+    const newTask = { ...normalized, id, createdAt: now, updatedAt: now };
     
     const { data, error } = await supabase
       .from('tasks')
@@ -548,19 +573,20 @@ export class SupabaseStorage implements IStorage {
       .single();
     
     if (error) throw new Error(`Failed to create task: ${error.message}`);
-    return fromSnakeCase(data) as Task;
+    return withDerivedCompleted(fromSnakeCase(data) as Task);
   }
 
   async updateTask(id: string, task: Partial<InsertTask>): Promise<Task> {
+    const normalized = normalizeTaskForDb(task);
     const { data, error } = await supabase
       .from('tasks')
-      .update({ ...toSnakeCase(task), updated_at: new Date() })
+      .update({ ...toSnakeCase(normalized), updated_at: new Date() })
       .eq('id', id)
       .select()
       .single();
     
     if (error) throw new Error(`Failed to update task: ${error.message}`);
-    return fromSnakeCase(data) as Task;
+    return withDerivedCompleted(fromSnakeCase(data) as Task);
   }
 
   async deleteTask(id: string): Promise<void> {
@@ -581,7 +607,7 @@ export class SupabaseStorage implements IStorage {
       .order('due_date', { ascending: true });
     
     if (error) throw new Error(`Failed to fetch tasks by due date: ${error.message}`);
-    return (data || []).map(fromSnakeCase) as Task[];
+    return (data || []).map((r) => withDerivedCompleted(fromSnakeCase(r) as Task));
   }
 
   async getPendingTasks(): Promise<Task[]> {
@@ -592,6 +618,6 @@ export class SupabaseStorage implements IStorage {
       .order('due_date', { ascending: true });
     
     if (error) throw new Error(`Failed to fetch pending tasks: ${error.message}`);
-    return (data || []).map(fromSnakeCase) as Task[];
+    return (data || []).map((r) => withDerivedCompleted(fromSnakeCase(r) as Task));
   }
 }

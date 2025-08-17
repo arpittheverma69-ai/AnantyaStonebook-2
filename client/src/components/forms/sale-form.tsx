@@ -37,8 +37,8 @@ export default function SaleForm({ sale, onClose }: SaleFormProps) {
       clientId: sale.clientId || "",
       stoneId: sale.stoneId || "",
       quantity: sale.quantity || 1,
-      totalAmount: sale.totalAmount,
-      profit: sale.profit,
+      totalAmount: Number(sale.totalAmount),
+      profit: Number(sale.profit),
       paymentStatus: sale.paymentStatus,
       notes: sale.notes || "",
     } : {
@@ -47,8 +47,8 @@ export default function SaleForm({ sale, onClose }: SaleFormProps) {
       clientId: "",
       stoneId: "",
       quantity: 1,
-      totalAmount: "0",
-      profit: "0",
+      totalAmount: 0,
+      profit: 0,
       paymentStatus: "Unpaid",
       notes: "",
     },
@@ -62,15 +62,15 @@ export default function SaleForm({ sale, onClose }: SaleFormProps) {
     if (watchedStoneId && watchedTotalAmount) {
       const selectedStone = inventory.find(item => item.id === watchedStoneId);
       if (selectedStone) {
-        const profit = parseFloat(watchedTotalAmount) - parseFloat(selectedStone.purchasePrice);
-        form.setValue("profit", profit.toString());
+        const profit = Number(watchedTotalAmount) - Number(selectedStone.totalPrice);
+        form.setValue("profit", profit);
       }
     }
   }, [watchedStoneId, watchedTotalAmount, inventory, form]);
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertSale) => {
-      return apiRequest("POST", "/api/sales", data);
+      return apiRequest("/api/sales", { method: "POST", body: data });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
@@ -92,7 +92,7 @@ export default function SaleForm({ sale, onClose }: SaleFormProps) {
 
   const updateMutation = useMutation({
     mutationFn: async (data: InsertSale) => {
-      return apiRequest("PATCH", `/api/sales/${sale!.id}`, data);
+      return apiRequest(`/api/sales/${sale!.id}`, { method: "PATCH", body: data });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
@@ -201,7 +201,7 @@ export default function SaleForm({ sale, onClose }: SaleFormProps) {
                 <SelectContent>
                   {availableStones.map((stone) => (
                     <SelectItem key={stone.id} value={stone.id}>
-                      {stone.type} - {stone.carat} Carat ({stone.stoneId})
+                      {stone.type} - {stone.carat} Carat ({stone.gemId})
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -54,7 +54,7 @@ export default function Certifications() {
 
   const updateCertificationMutation = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: any }) => {
-      return apiRequest("PATCH", `/api/certifications/${id}`, updates);
+      return apiRequest(`/api/certifications/${id}`, { method: "PATCH", body: updates });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/certifications"] });
@@ -75,7 +75,7 @@ export default function Certifications() {
   const createCertificationMutation = useMutation({
     mutationFn: async (certification: any) => {
       console.log('Sending certification data:', certification);
-      return apiRequest("POST", "/api/certifications", certification);
+      return apiRequest("/api/certifications", { method: "POST", body: certification });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/certifications"] });
@@ -162,7 +162,7 @@ export default function Certifications() {
               certificateFile: updatedCertification.certificateFile
             };
             
-            await apiRequest("PATCH", `/api/inventory/${updatedCertification.stoneId}`, inventoryUpdate);
+            await apiRequest(`/api/inventory/${updatedCertification.stoneId}`, { method: "PATCH", body: inventoryUpdate });
             
             toast({
               title: "Stone Certified",

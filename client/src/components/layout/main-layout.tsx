@@ -29,8 +29,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
       
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header onSidebarToggle={() => setSidebarOpen(!sidebarOpen)} />
-        <main className="flex-1 overflow-auto p-6 space-y-6">
-          <div className="max-w-7xl mx-auto">
+        <main className="flex-1 overflow-auto p-3 sm:p-4 md:p-6 space-y-4 md:space-y-6">
+          <div className="max-w-7xl mx-auto w-full">
             {children}
           </div>
         </main>

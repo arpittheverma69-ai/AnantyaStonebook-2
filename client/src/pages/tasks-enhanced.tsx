@@ -202,7 +202,7 @@ export default function TasksEnhanced() {
 
   const updateTaskMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<Task> }) => {
-      return apiRequest("PATCH", `/api/tasks/${id}`, data);
+      return apiRequest(`/api/tasks/${id}`, { method: "PATCH", body: data });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
@@ -222,7 +222,7 @@ export default function TasksEnhanced() {
 
   const deleteTaskMutation = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest("DELETE", `/api/tasks/${id}`);
+      return apiRequest(`/api/tasks/${id}`, { method: "DELETE" });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });

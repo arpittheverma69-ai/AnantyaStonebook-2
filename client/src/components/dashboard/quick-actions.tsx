@@ -62,17 +62,17 @@ export default function QuickActions() {
         <CardTitle className="text-lg font-semibold text-foreground">Quick Actions</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           {actions.map((action) => (
-            <Link key={action.title} to={action.href}>
+            <Link key={action.title} to={action.href} className="block">
               <Button
                 variant="outline"
-                className={`flex flex-col items-center space-y-2 p-4 h-auto bg-background/50 backdrop-blur-sm border-border hover:bg-gradient-to-br hover:${action.color} hover:text-white hover:border-transparent transition-all duration-300 group rounded-[var(--radius)]`}
+                className={`w-full flex flex-col items-center justify-center space-y-3 p-4 h-auto min-h-[120px] bg-background/50 backdrop-blur-sm border-border hover:bg-gradient-to-br hover:${action.color} hover:text-white hover:border-transparent transition-all duration-300 group rounded-[var(--radius)]`}
               >
-                <div className={`w-10 h-10 bg-gradient-to-br ${action.color} rounded-2xl flex items-center justify-center shadow-md group-hover:shadow-lg transition-all duration-300`}>
-                  <action.icon className="h-5 w-5 text-white" />
+                <div className={`w-12 h-12 bg-gradient-to-br ${action.color} rounded-2xl flex items-center justify-center shadow-md group-hover:shadow-lg transition-all duration-300 flex-shrink-0`}>
+                  <action.icon className="h-6 w-6 text-white" />
                 </div>
-                <span className="text-sm font-medium">{action.title}</span>
+                <span className="text-sm font-medium text-center leading-tight px-2">{action.title}</span>
               </Button>
             </Link>
           ))}

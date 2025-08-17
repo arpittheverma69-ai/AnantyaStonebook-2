@@ -63,16 +63,16 @@ export default function Dashboard() {
 
   if (isLoading) {
     return (
-      <div className="space-y-8">
-        <div className="animate-pulse space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="space-y-4 md:space-y-8">
+        <div className="animate-pulse space-y-4 md:space-y-6">
+          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
             {[...Array(8)].map((_, i) => (
-              <div key={i} className="h-32 bg-muted rounded-[var(--radius)]"></div>
+              <div key={i} className="h-20 md:h-32 bg-muted rounded-[var(--radius)]"></div>
             ))}
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 h-80 bg-muted rounded-[var(--radius)]"></div>
-            <div className="h-80 bg-muted rounded-[var(--radius)]"></div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+            <div className="lg:col-span-2 h-60 md:h-80 bg-muted rounded-[var(--radius)]"></div>
+            <div className="h-60 md:h-80 bg-muted rounded-[var(--radius)]"></div>
           </div>
         </div>
       </div>
@@ -80,13 +80,13 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4 md:space-y-8">
       {/* Welcome Section */}
       <div className="text-center space-y-2">
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
+        <h1 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
           Welcome to Anantya
         </h1>
-        <p className="text-muted-foreground text-lg">
+        <p className="text-muted-foreground text-sm md:text-lg">
           Your premium gemstone business dashboard
         </p>
       </div>
@@ -95,32 +95,38 @@ export default function Dashboard() {
       <MetricsCards metrics={metrics} />
       
       {/* Charts and Analytics Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <SalesChart />
-        <SocialTraffic />
-        <TopPerformingStones />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+        <div className="lg:col-span-2">
+          <SalesChart />
+        </div>
+        <div className="order-first lg:order-last">
+          <SocialTraffic />
+        </div>
       </div>
       
-      {/* Business Data Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <TopClients />
-        <TopSuppliers suppliers={metrics?.topPerformingSuppliers} />
-      </div>
-      
-      {/* Recent Activity Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <RecentInventory />
-        <RecentSales sales={metrics?.recentSales} />
-      </div>
-      
-      {/* AI Insights and Tasks Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <AIInsights />
+      {/* Quick Actions and Tasks */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+        <QuickActions />
         <TasksWidget />
       </div>
       
-      {/* Quick Actions */}
-      <QuickActions />
+      {/* Recent Activity Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+        <RecentInventory />
+        <RecentSales />
+      </div>
+      
+      {/* Analytics and Insights Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+        <TopClients />
+        <TopSuppliers />
+      </div>
+      
+      {/* Performance and AI Insights */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+        <TopPerformingStones />
+        <AIInsights />
+      </div>
     </div>
   );
 }

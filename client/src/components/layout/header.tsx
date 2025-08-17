@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useAuth } from "@/contexts/auth-context";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,34 +19,38 @@ interface HeaderProps {
 
 export default function Header({ onSidebarToggle }: HeaderProps) {
   const { user, signOut } = useAuth();
+  const isMobile = useIsMobile();
+
   return (
-    <header className="header-modern border-b px-6 py-4 sticky top-0 z-30">
+    <header className="header-modern border-b px-4 py-2 md:px-6 md:py-4 sticky top-0 z-30 bg-background/80 backdrop-blur-sm">
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-2 md:space-x-4">
           <Button
             variant="ghost"
             size="sm"
-            className="lg:hidden btn-modern"
+            className="lg:hidden btn-modern p-2"
             onClick={onSidebarToggle}
           >
-            <Menu className="h-5 w-5" />
+            <Menu className="h-4 w-4 md:h-5 md:w-5" />
           </Button>
-          <div>
-            <h2 className="text-2xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg md:text-2xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent truncate">
               Anantya CRM
             </h2>
-            <p className="text-muted-foreground">Your premium gemstone business management</p>
+            <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">
+              Your premium gemstone business management
+            </p>
           </div>
         </div>
         
-        <div className="flex items-center space-x-4">
-          {/* Online Status Indicator */}
-          <div className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-green-500/10 to-emerald-500/10 text-green-700 dark:text-green-400 rounded-full text-sm border border-green-200 dark:border-green-800">
+        <div className="flex items-center space-x-2 md:space-x-4">
+          {/* Online Status Indicator - Hidden on mobile */}
+          <div className="hidden sm:flex items-center space-x-2 px-3 py-1.5 md:px-4 md:py-2 bg-gradient-to-r from-green-500/10 to-emerald-500/10 text-green-700 dark:text-green-400 rounded-full text-xs md:text-sm border border-green-200 dark:border-green-800">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
             <span className="font-medium">Online</span>
           </div>
           
-          {/* Search */}
+          {/* Search - Hidden on mobile */}
           <div className="relative hidden md:block">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
             <Input
@@ -56,9 +61,9 @@ export default function Header({ onSidebarToggle }: HeaderProps) {
           </div>
           
           {/* Notifications */}
-          <Button variant="ghost" size="sm" className="relative btn-modern">
-            <Bell className="h-5 w-5" />
-            <span className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs rounded-full flex items-center justify-center shadow-lg">
+          <Button variant="ghost" size="sm" className="relative btn-modern p-2">
+            <Bell className="h-4 w-4 md:h-5 md:w-5" />
+            <span className="absolute -top-1 -right-1 w-4 h-4 md:w-5 md:h-5 bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs rounded-full flex items-center justify-center shadow-lg">
               3
             </span>
           </Button>
@@ -69,9 +74,9 @@ export default function Header({ onSidebarToggle }: HeaderProps) {
           {/* User Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="btn-modern">
-                <User className="h-5 w-5 mr-2" />
-                 <span className="hidden sm:inline">{user?.email || "User"}</span>
+              <Button variant="ghost" size="sm" className="btn-modern p-2">
+                <User className="h-4 w-4 md:h-5 md:w-5 mr-1 md:mr-2" />
+                <span className="hidden sm:inline text-sm">{user?.email || "User"}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">

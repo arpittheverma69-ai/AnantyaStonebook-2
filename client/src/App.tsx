@@ -17,6 +17,16 @@ import Finance from "@/pages/finance";
 import AIAnalysis from "@/pages/ai-analysis";
 import AstrologicalAI from "@/pages/astrological-ai";
 import Tasks from "@/pages/tasks";
+import Profile from "@/pages/profile";
+import ValuationCalculator from "@/pages/valuation-calculator";
+import ClientFollowUp from "@/pages/client-follow-up";
+import InventoryIntelligence from "@/pages/inventory-intelligence";
+import BulkPurchaseOptimizer from "@/pages/bulk-purchase-optimizer";
+import DocsAndCompliance from "@/pages/docs-and-compliance";
+import ReportingAnalytics from "@/pages/reporting-analytics";
+import QualityComparison from "@/pages/quality-comparison";
+import MarketPriceTracker from "@/pages/market-price-tracker";
+import ScanFind from "@/pages/scan-find";
 
 function Router() {
   return (
@@ -103,6 +113,76 @@ function Router() {
         <ProtectedRoute>
           <MainLayout>
             <Tasks />
+          </MainLayout>
+        </ProtectedRoute>
+      } />
+      <Route path="/profile" element={
+        <ProtectedRoute>
+          <MainLayout>
+            <Profile />
+          </MainLayout>
+        </ProtectedRoute>
+      } />
+      <Route path="/valuation-calculator" element={
+        <ProtectedRoute>
+          <MainLayout>
+            <ValuationCalculator />
+          </MainLayout>
+        </ProtectedRoute>
+      } />
+      <Route path="/client-follow-up" element={
+        <ProtectedRoute>
+          <MainLayout>
+            <ClientFollowUp />
+          </MainLayout>
+        </ProtectedRoute>
+      } />
+      <Route path="/inventory-intelligence" element={
+        <ProtectedRoute>
+          <MainLayout>
+            <InventoryIntelligence />
+          </MainLayout>
+        </ProtectedRoute>
+      } />
+      <Route path="/bulk-optimizer" element={
+        <ProtectedRoute>
+          <MainLayout>
+            <BulkPurchaseOptimizer />
+          </MainLayout>
+        </ProtectedRoute>
+      } />
+      <Route path="/docs-compliance" element={
+        <ProtectedRoute>
+          <MainLayout>
+            <DocsAndCompliance />
+          </MainLayout>
+        </ProtectedRoute>
+      } />
+      <Route path="/reporting-analytics" element={
+        <ProtectedRoute>
+          <MainLayout>
+            <ReportingAnalytics />
+          </MainLayout>
+        </ProtectedRoute>
+      } />
+      <Route path="/quality-comparison" element={
+        <ProtectedRoute>
+          <MainLayout>
+            <QualityComparison />
+          </MainLayout>
+        </ProtectedRoute>
+      } />
+      <Route path="/market-price-tracker" element={
+        <ProtectedRoute>
+          <MainLayout>
+            <MarketPriceTracker />
+          </MainLayout>
+        </ProtectedRoute>
+      } />
+      <Route path="/scan-find" element={
+        <ProtectedRoute>
+          <MainLayout>
+            <ScanFind />
           </MainLayout>
         </ProtectedRoute>
       } />

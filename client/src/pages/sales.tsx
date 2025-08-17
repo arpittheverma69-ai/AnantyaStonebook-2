@@ -119,6 +119,22 @@ export default function Sales() {
   const [inventory, setInventory] = useState<Inventory[]>([]);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  // Build disclosures based on inventory.extended.treatments
+  function collectTreatmentDisclosures(items?: SaleItem[]): string[] {
+    if (!items || items.length === 0) return [];
+    const disclosures: string[] = [];
+    for (const it of items) {
+      const inv = inventory.find((s: any) => s.gemId === it.stoneId || s.id === it.stoneId || (s as any).gem_id === it.stoneId);
+      const ext = (inv as any)?.extended;
+      if (ext?.discloseTreatments && ext?.treatments) {
+        const active = Object.entries(ext.treatments).filter(([,v])=>!!v).map(([k])=>k);
+        if (active.length > 0) {
+          disclosures.push(`${inv?.type || 'Stone'} (${inv?.gemId || inv?.id}): treatments - ${active.join(', ')}`);
+        }
+      }
+    }
+    return disclosures;
+  }
 
   // Load data from database
   useEffect(() => {
@@ -475,39 +491,17 @@ export default function Sales() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header Section */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
-            Sales Management
-          </h1>
-          <p className="text-muted-foreground text-lg">
-            Track your gemstone sales transactions and generate invoices
-          </p>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Sales Management</h1>
+          <p className="text-muted-foreground text-sm md:text-base">Track your sales, generate invoices, and manage payments</p>
         </div>
-        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <DialogTrigger asChild>
-            <Button className="btn-modern bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90">
-              <Plus className="h-4 w-4 mr-2" />
-              Record Sale
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-2xl font-bold">
-                {editingSale ? "Edit Sale" : "Record New Sale"}
-              </DialogTitle>
-            </DialogHeader>
-            <SaleForm 
-              sale={editingSale} 
-              onClose={handleFormClose}
-              onSubmit={editingSale ? handleUpdateSale : handleAddSale}
-              clients={clients}
-              inventory={inventory}
-            />
-          </DialogContent>
-        </Dialog>
+        <Button onClick={() => setIsFormOpen(true)} className="btn-modern bg-gradient-to-r from-primary to-purple-600 w-full sm:w-auto">
+          <Plus className="h-4 w-4 mr-2" />
+          Add Sale
+        </Button>
       </div>
 
       {/* Filters and Search */}
@@ -709,7 +703,8 @@ function SaleDetailView({
                 isOutOfState: sale.isOutOfState || false,
                 paymentStatus: sale.paymentStatus,
                 waitingPeriod: sale.waitingPeriod,
-                isTrustworthy: sale.isTrustworthy
+                isTrustworthy: sale.isTrustworthy,
+                treatmentDisclosures: collectTreatmentDisclosures(sale.items)
               };
               downloadInvoice(invoiceData);
               toast({
@@ -742,7 +737,8 @@ function SaleDetailView({
                 isOutOfState: sale.isOutOfState || false,
                 paymentStatus: sale.paymentStatus,
                 waitingPeriod: sale.waitingPeriod,
-                isTrustworthy: sale.isTrustworthy
+                isTrustworthy: sale.isTrustworthy,
+                treatmentDisclosures: collectTreatmentDisclosures(sale.items)
               };
               const result = await shareInvoice(invoiceData);
               if (result === 'shared') {
@@ -782,7 +778,8 @@ function SaleDetailView({
                 isOutOfState: sale.isOutOfState || false,
                 paymentStatus: sale.paymentStatus,
                 waitingPeriod: sale.waitingPeriod,
-                isTrustworthy: sale.isTrustworthy
+                isTrustworthy: sale.isTrustworthy,
+                treatmentDisclosures: collectTreatmentDisclosures(sale.items)
               };
               printInvoice(invoiceData);
               toast({

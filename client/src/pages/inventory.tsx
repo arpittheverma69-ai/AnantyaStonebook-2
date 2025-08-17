@@ -9,12 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { 
-  Plus, 
-  Search, 
-  Edit, 
-  Trash2, 
-  Grid3X3, 
+import {
+  Plus,
+  Search,
+  Edit,
+  Trash2,
+  Grid3X3,
   List,
   Eye,
   Download,
@@ -22,11 +22,21 @@ import {
   Printer,
   Sparkles,
   Upload,
-  X
+  X,
+  QrCode,
+  Barcode,
+  Camera,
+  Scan,
+  Images,
+  Settings
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { inventoryService, certificationService } from "@/lib/database";
+import { inventoryService, certificationService, supplierService, fileService } from "@/lib/database";
 import { AIAnalysis } from "@/components/dashboard/ai-analysis";
+import { BrowserMultiFormatReader } from "@zxing/browser";
+import QRCode from "qrcode";
+// @ts-ignore - jsbarcode has no official types
+import JsBarcode from "jsbarcode";
 
 // Utility function for currency formatting
 const formatCurrency = (amount: number) => {
@@ -107,10 +117,17 @@ export default function Inventory() {
   const [inventory, setInventory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [labelItem, setLabelItem] = useState<any | null>(null);
+  const [detailItem, setDetailItem] = useState<any | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   // Load inventory data from Supabase
   useEffect(() => {
     loadInventory();
+    loadSuppliers();
   }, []);
 
   const loadInventory = async () => {
@@ -132,7 +149,23 @@ export default function Inventory() {
         supplierId: item.supplier_id,
         certificateLab: item.certificate_lab,
         certificateFile: item.certificate_file,
-        packageType: item.package_type
+        packageType: item.package_type,
+        // Prefer real columns; fallback to notes JSON if necessary
+        extended: (() => {
+          const ext: any = {
+            treatments: item.treatments || undefined,
+            discloseTreatments: item.disclose_treatments ?? undefined,
+            media: item.media || undefined,
+            reorderRules: item.reorder_rules || undefined,
+          };
+          if (ext.treatments || ext.media || ext.reorderRules || typeof ext.discloseTreatments === 'boolean') return ext;
+          try {
+            const parsed = typeof item.notes === 'string' ? JSON.parse(item.notes) : item.notes;
+            if (parsed && parsed.extended) return parsed.extended;
+            if (parsed && (parsed.treatments || parsed.media || parsed.reorderRules)) return parsed;
+          } catch {}
+          return {};
+        })()
       }));
       setInventory(mapped);
     } catch (error) {
@@ -144,6 +177,15 @@ export default function Inventory() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadSuppliers = async () => {
+    try {
+      const sup = await supplierService.getAll();
+      setSuppliers(sup);
+    } catch (e) {
+      // non-blocking
     }
   };
 
@@ -246,6 +288,61 @@ export default function Inventory() {
     }
   };
 
+  // Scanner logic
+  useEffect(() => {
+    let reader: BrowserMultiFormatReader | null = null;
+    let controls: any | null = null;
+    let stopped = false;
+    if (isScannerOpen) {
+      reader = new BrowserMultiFormatReader();
+      const video = document.getElementById('scanner-video') as HTMLVideoElement | null;
+      if (video) {
+        reader
+          // The third arg provides controls with a stop() method
+          .decodeFromVideoDevice(undefined, video, (result, err, ctl) => {
+            if (ctl) controls = ctl;
+            if (stopped) return;
+            if (result) {
+              const text = result.getText();
+              const found = inventory.find((it) => it.gemId === text || it.id === text);
+              if (found) {
+                setIsScannerOpen(false);
+                setScanError(null);
+                setEditingItem(found);
+                // stop scanning once found
+                try { controls?.stop(); } catch {}
+              }
+            }
+          })
+          .catch((e) => setScanError(String(e)));
+      }
+    }
+    return () => {
+      stopped = true;
+      try { controls?.stop(); } catch {}
+    };
+  }, [isScannerOpen, inventory]);
+
+  // Render QR/Barcode when label dialog opens
+  useEffect(() => {
+    if (!labelItem) return;
+    const id = labelItem.gemId || labelItem.id || '';
+    // slight delay to ensure dialog content is in DOM
+    const t = setTimeout(() => {
+      renderLabelIntoElements(labelItem, 'qr-canvas', 'barcode-svg');
+    }, 0);
+    return () => clearTimeout(t);
+  }, [labelItem]);
+
+  // Render QR/Barcode in detail dialog
+  useEffect(() => {
+    if (!detailItem) return;
+    const t = setTimeout(() => {
+      renderLabelIntoElements(detailItem, 'qr-canvas-detail', 'barcode-svg-detail');
+    }, 0);
+    return () => clearTimeout(t);
+  }, [detailItem]);
+
   const handleDelete = async (id: string) => {
     try {
       await inventoryService.delete(id);
@@ -308,21 +405,27 @@ export default function Inventory() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Inventory Management</h1>
-          <p className="text-muted-foreground">Track your gemstone inventory and generate AI analysis</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Inventory Management</h1>
+          <p className="text-muted-foreground text-sm md:text-base">Track your gemstone inventory and generate AI analysis</p>
         </div>
-        <Button onClick={() => setIsFormOpen(true)} className="btn-modern bg-gradient-to-r from-primary to-purple-600">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Gemstone
-        </Button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button onClick={() => setIsScannerOpen(true)} variant="outline" className="w-full sm:w-auto">
+            <Scan className="h-4 w-4 mr-2" />
+            Scan Label
+          </Button>
+          <Button onClick={() => setIsFormOpen(true)} className="btn-modern bg-gradient-to-r from-primary to-purple-600 w-full sm:w-auto">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Gemstone
+          </Button>
+        </div>
       </div>
 
       {/* Filters and Search */}
-      <div className="flex flex-col sm:flex-row gap-4">
+      <div className="flex flex-col gap-3 md:gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
           <Input
@@ -333,72 +436,57 @@ export default function Inventory() {
           />
         </div>
         
-        <Select value={selectedType} onValueChange={setSelectedType}>
-          <SelectTrigger className="w-[180px] input-modern">
-            <SelectValue placeholder="Filter by Type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            {GEMSTONE_TYPES.map(type => (
-              <SelectItem key={type} value={type}>{type}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="grid grid-cols-2 md:flex md:gap-4 gap-2">
+          <Select value={selectedType} onValueChange={setSelectedType}>
+            <SelectTrigger className="input-modern text-xs md:text-sm">
+              <SelectValue placeholder="Filter by Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              {GEMSTONE_TYPES.map(type => (
+                <SelectItem key={type} value={type}>{type}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-        <Select value={selectedGrade} onValueChange={setSelectedGrade}>
-          <SelectTrigger className="w-[180px] input-modern">
-            <SelectValue placeholder="Filter by Grade" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Grades</SelectItem>
-            {GRADES.map(grade => (
-              <SelectItem key={grade} value={grade}>{grade}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          <Select value={selectedGrade} onValueChange={setSelectedGrade}>
+            <SelectTrigger className="input-modern text-xs md:text-sm">
+              <SelectValue placeholder="Filter by Grade" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Grades</SelectItem>
+              {GRADES.map(grade => (
+                <SelectItem key={grade} value={grade}>{grade}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-        <Select value={selectedOrigin} onValueChange={setSelectedOrigin}>
-          <SelectTrigger className="w-[180px] input-modern">
-            <SelectValue placeholder="Filter by Origin" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Origins</SelectItem>
-            {ORIGINS.map(origin => (
-              <SelectItem key={origin} value={origin}>{origin}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <div className="flex border rounded-[var(--radius)] p-1 bg-muted/30">
-          <Button
-            variant={viewMode === 'card' ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => setViewMode('card')}
-            className="btn-modern"
-          >
-            <Grid3X3 className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={viewMode === 'list' ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => setViewMode('list')}
-            className="btn-modern"
-          >
-            <List className="h-4 w-4" />
-            </Button>
+          <Select value={selectedOrigin} onValueChange={setSelectedOrigin}>
+            <SelectTrigger className="input-modern text-xs md:text-sm">
+              <SelectValue placeholder="Filter by Origin" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Origins</SelectItem>
+              {ORIGINS.map(origin => (
+                <SelectItem key={origin} value={origin}>{origin}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
       {/* Inventory Display */}
       {viewMode === 'card' ? (
-        <GemstoneCardView 
+        <GemstoneCardView
           inventory={filteredInventory} 
           onEdit={setEditingItem}
           onDelete={handleDelete}
           onAIAnalysis={setSelectedClient}
+          onShowLabel={(item: any) => setLabelItem(item)}
+          onView={(item: any) => setDetailItem(item)}
         />
       ) : (
-        <GemstoneListView 
+        <GemstoneListView
           inventory={filteredInventory} 
           onEdit={setEditingItem}
           onDelete={handleDelete}
@@ -420,10 +508,168 @@ export default function Inventory() {
             gemstone={editingItem}
             onSubmit={editingItem ? (data) => handleEdit(editingItem.id, data) : handleAddGemstone}
             onCancel={handleFormClose}
+            suppliers={suppliers}
             />
           </DialogContent>
         </Dialog>
 
+      {/* Scanner Dialog */}
+      <Dialog open={isScannerOpen} onOpenChange={setIsScannerOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Scan QR/Barcode</DialogTitle>
+            <DialogDescription>Point your camera at a label to open the gemstone.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <video id="scanner-video" className="w-full rounded bg-black" />
+            {scanError && <p className="text-xs text-red-600">{scanError}</p>}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Label Dialog */}
+      <Dialog open={!!labelItem} onOpenChange={(open) => !open && setLabelItem(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Gemstone Label</DialogTitle>
+            <DialogDescription>QR and barcode label for quick identification.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="text-center">
+              <p className="font-semibold">{labelItem?.type} • {labelItem?.grade}</p>
+              <p className="text-xs text-muted-foreground">{labelItem?.gemId}</p>
+            </div>
+            <canvas id="qr-canvas" className="mx-auto" />
+            <svg id="barcode-svg" className="w-full h-16" />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => printLabel(labelItem!)}>Print</Button>
+              <Button size="sm" onClick={() => downloadLabel(labelItem!)}>Download</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Detail Dialog */}
+      <Dialog open={!!detailItem} onOpenChange={(open) => !open && setDetailItem(null)}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Gemstone Details</DialogTitle>
+            <DialogDescription>Full information and assets for this stone.</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left: Media */}
+            <div className="space-y-3 lg:col-span-1">
+              {detailItem?.imageUrl && (
+                <img src={detailItem.imageUrl} className="w-full h-56 object-contain rounded border bg-white" onClick={()=>setLightboxUrl(detailItem.imageUrl)} />
+              )}
+              {Array.isArray(detailItem?.extended?.media) && detailItem.extended.media.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {detailItem.extended.media.map((m:any, idx:number)=> (
+                    <button key={idx} className="block" onClick={()=>setLightboxUrl(m.url)}>
+                      {m.type?.startsWith('image') ? (
+                        <img src={m.url} className="w-full h-20 object-cover rounded" />
+                      ) : (
+                        <video src={m.url} className="w-full h-20 object-cover rounded" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="border rounded p-3 space-y-2">
+                <div className="text-sm font-semibold">Label</div>
+                <canvas id="qr-canvas-detail" className="mx-auto" />
+                <svg id="barcode-svg-detail" className="w-full h-16" />
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" size="sm" onClick={()=>printLabel(detailItem!)}>Print</Button>
+                  <Button size="sm" onClick={()=>downloadLabel(detailItem!)}>Download</Button>
+                </div>
+              </div>
+            </div>
+            {/* Right: Facts */}
+            <div className="lg:col-span-2 space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={detailItem?.isAvailable ? 'default' : 'secondary'}>
+                      {detailItem?.isAvailable ? 'Available' : 'Sold'}
+                    </Badge>
+                  </div>
+                  <div className="text-2xl font-semibold mt-1">{detailItem?.type}</div>
+                  <div className="text-xs text-muted-foreground">{detailItem?.gemId}</div>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={()=>setEditingItem(detailItem)}><Edit className="h-4 w-4 mr-1"/>Edit</Button>
+                  <Button variant="outline" onClick={()=>setSelectedClient(detailItem)}><Sparkles className="h-4 w-4 mr-1"/>AI</Button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <div className="text-muted-foreground text-sm">Grade</div>
+                  <div className="font-semibold">{detailItem?.grade}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-sm">Carat</div>
+                  <div className="font-semibold">{detailItem?.carat} ct</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-sm">Origin</div>
+                  <div className="font-semibold">{detailItem?.origin}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-sm">Quantity</div>
+                  <div className="font-semibold">{detailItem?.quantity}</div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between"><span className="text-muted-foreground">Price per Carat:</span><span className="font-semibold">{formatCurrency(detailItem?.pricePerCarat || 0)}/ct</span></div>
+                <div className="flex justify-between text-lg font-bold text-primary"><span>Total Price:</span><span>{formatCurrency(detailItem?.totalPrice || 0)}</span></div>
+              </div>
+              {detailItem?.description && (
+                <div>
+                  <div className="text-muted-foreground text-sm">Description</div>
+                  <div className="text-sm">{detailItem.description}</div>
+                </div>
+              )}
+              {detailItem?.extended?.treatments && (
+                <div>
+                  <div className="text-muted-foreground text-sm mb-2">Treatments</div>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(detailItem.extended.treatments).filter(([,v])=>!!v).map(([k,v])=> (
+                      <Badge key={k} variant="outline">{String(k)}</Badge>
+                    ))}
+                  </div>
+                  {detailItem?.extended?.discloseTreatments && (
+                    <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mt-2">Disclosure enabled for invoices</div>
+                  )}
+                </div>
+              )}
+              {detailItem?.extended?.reorderRules && (
+                <div className="border rounded p-3">
+                  <div className="text-sm font-semibold mb-2">Reorder Rules</div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                    <div><span className="text-muted-foreground">Type: </span>{detailItem.extended.reorderRules.type}</div>
+                    <div><span className="text-muted-foreground">Grade: </span>{detailItem.extended.reorderRules.grade}</div>
+                    <div><span className="text-muted-foreground">Origin: </span>{detailItem.extended.reorderRules.origin}</div>
+                    <div><span className="text-muted-foreground">Min Stock: </span>{detailItem.extended.reorderRules.minStock}</div>
+                    <div><span className="text-muted-foreground">Reorder Qty: </span>{detailItem.extended.reorderRules.reorderQty}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Lightbox */}
+      <Dialog open={!!lightboxUrl} onOpenChange={(open)=>!open && setLightboxUrl(null)}>
+        <DialogContent className="max-w-3xl">
+          {lightboxUrl?.match(/\.mp4|video\//) ? (
+            <video src={lightboxUrl} className="w-full" controls autoPlay />
+          ) : (
+            <img src={lightboxUrl || ''} className="w-full" />
+          )}
+        </DialogContent>
+      </Dialog>
       {/* AI Analysis */}
       {selectedClient && (
         <AIAnalysis gemstone={selectedClient} onClose={() => setSelectedClient(null)} />
@@ -433,7 +679,7 @@ export default function Inventory() {
 }
 
 // Card View Component
-function GemstoneCardView({ inventory, onEdit, onDelete, onAIAnalysis }: any) {
+function GemstoneCardView({ inventory, onEdit, onDelete, onAIAnalysis, onShowLabel, onView }: any) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {inventory.map((gemstone) => (
@@ -452,6 +698,16 @@ function GemstoneCardView({ inventory, onEdit, onDelete, onAIAnalysis }: any) {
           <CardContent className="space-y-4">
             {gemstone.imageUrl && (
               <img src={gemstone.imageUrl} alt={gemstone.type} className="w-full h-40 object-contain bg-white rounded mx-auto" />
+            )}
+            {Array.isArray(gemstone.extended?.media) && gemstone.extended.media.length > 0 && (
+              <div className="flex -space-x-2">
+                {gemstone.extended.media.slice(0,3).map((m: any, idx: number) => (
+                  <img key={idx} src={m.url} className="w-10 h-10 rounded ring-2 ring-white object-cover" />
+                ))}
+                {gemstone.extended.media.length > 3 && (
+                  <div className="w-10 h-10 rounded bg-gray-100 text-xs flex items-center justify-center ring-2 ring-white">+{gemstone.extended.media.length - 3}</div>
+                )}
+              </div>
             )}
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
@@ -481,6 +737,13 @@ function GemstoneCardView({ inventory, onEdit, onDelete, onAIAnalysis }: any) {
                 <span>{formatCurrency(gemstone.totalPrice)}</span>
               </div>
             </div>
+            {gemstone.extended?.treatments && (
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(gemstone.extended.treatments).filter(([,v]) => !!v).map(([k]) => (
+                  <Badge key={k} variant="outline">{String(k)}</Badge>
+                ))}
+              </div>
+            )}
             <div className="flex space-x-2">
               <Button
                 variant="outline"
@@ -490,6 +753,22 @@ function GemstoneCardView({ inventory, onEdit, onDelete, onAIAnalysis }: any) {
               >
                 <Edit className="h-4 w-4 mr-1" />
                 Edit
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onView(gemstone)}
+                className="flex-1"
+              >
+                <Eye className="h-4 w-4 mr-1" />
+                View
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onShowLabel(gemstone)}
+              >
+                <QrCode className="h-4 w-4" />
               </Button>
               <Button
                 variant="outline"
@@ -584,7 +863,7 @@ function GemstoneListView({ inventory, onEdit, onDelete }: any) {
 }
 
 // Form Component
-function GemstoneForm({ gemstone, onSubmit, onCancel }: any) {
+function GemstoneForm({ gemstone, onSubmit, onCancel, suppliers = [] }: any) {
   const [formData, setFormData] = useState({
     type: gemstone?.type || '',
     grade: gemstone?.grade || 'A',
@@ -607,6 +886,27 @@ function GemstoneForm({ gemstone, onSubmit, onCancel }: any) {
   const [isUploading, setIsUploading] = useState(false);
   const [certificateFile, setCertificateFile] = useState<File | null>(null);
   const [certificateFileName, setCertificateFileName] = useState<string>(gemstone?.certificateFile || '');
+  const [treatments, setTreatments] = useState<any>({
+    heat: gemstone?.extended?.treatments?.heat || false,
+    oil: gemstone?.extended?.treatments?.oil || false,
+    diffusion: gemstone?.extended?.treatments?.diffusion || false,
+    other: gemstone?.extended?.treatments?.other || ''
+  });
+  const [discloseTreatments, setDiscloseTreatments] = useState<boolean>(gemstone?.extended?.discloseTreatments || false);
+  const [media, setMedia] = useState<any[]>(gemstone?.extended?.media || []);
+  const [newMediaMeta, setNewMediaMeta] = useState({
+    lighting: 'Diffuse',
+    angle: 'Top',
+    caption: ''
+  });
+  const [reorderRules, setReorderRules] = useState<any>({
+    type: gemstone?.type || '',
+    grade: gemstone?.grade || 'A',
+    origin: gemstone?.origin || '',
+    minStock: gemstone?.extended?.reorderRules?.minStock || 0,
+    reorderQty: gemstone?.extended?.reorderRules?.reorderQty || 0,
+    preferredSupplierId: gemstone?.extended?.reorderRules?.preferredSupplierId || ''
+  });
 
   const handleImageUpload = async (file: File) => {
     if (!file) return;
@@ -679,7 +979,14 @@ function GemstoneForm({ gemstone, onSubmit, onCancel }: any) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    const payload = {
+      ...formData,
+      treatments,
+      discloseTreatments,
+      media,
+      reorderRules,
+    };
+    onSubmit(payload);
   };
 
   return (
@@ -928,6 +1235,103 @@ function GemstoneForm({ gemstone, onSubmit, onCancel }: any) {
         )}
       </div>
 
+      {/* Media Manager */}
+      <div className="space-y-3 border-t pt-6">
+        <div className="flex items-center justify-between">
+          <Label className="text-lg font-semibold flex items-center gap-2"><Images className="h-4 w-4" /> Media (Photos/Videos)</Label>
+          <div className="text-xs text-muted-foreground">Add multiple views with presets</div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          {media.map((m, idx) => (
+            <div key={idx} className="border rounded p-2 space-y-1">
+              {m.type.startsWith('image') ? (
+                <img src={m.url} className="w-full h-28 object-cover rounded" />
+              ) : (
+                <video src={m.url} className="w-full h-28 object-cover rounded" controls />
+              )}
+              <div className="text-xs text-muted-foreground">{m.meta?.lighting} • {m.meta?.angle}</div>
+              <div className="text-xs truncate">{m.meta?.caption}</div>
+              <div className="flex justify-end">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setMedia(media.filter((_,i)=>i!==idx))}>Remove</Button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Select value={newMediaMeta.lighting} onValueChange={(v)=>setNewMediaMeta({...newMediaMeta, lighting:v})}>
+            <SelectTrigger className="input-modern"><SelectValue placeholder="Lighting" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Diffuse">Diffuse</SelectItem>
+              <SelectItem value="Direct">Direct</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={newMediaMeta.angle} onValueChange={(v)=>setNewMediaMeta({...newMediaMeta, angle:v})}>
+            <SelectTrigger className="input-modern"><SelectValue placeholder="Angle" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Top">Top</SelectItem>
+              <SelectItem value="Side">Side</SelectItem>
+              <SelectItem value="Back">Back</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input value={newMediaMeta.caption} onChange={(e)=>setNewMediaMeta({...newMediaMeta, caption:e.target.value})} placeholder="Caption (optional)" className="input-modern" />
+        </div>
+        <div className="flex gap-2">
+          <input type="file" accept="image/*,video/*" onChange={async (e)=>{
+            const file = e.target.files?.[0];
+            if (!file) return;
+            try {
+              const url = await fileService.uploadFile(file);
+              setMedia([...media, { url, type: file.type, meta: newMediaMeta }]);
+            } catch (err) {
+              console.error(err);
+            }
+          }} id="media-upload" className="hidden" />
+          <label htmlFor="media-upload" className="btn-modern inline-flex items-center px-4 py-2 cursor-pointer">
+            <Upload className="h-4 w-4 mr-2" /> Add Photo/Video
+          </label>
+        </div>
+      </div>
+
+      {/* Treatments & Disclosure */}
+      <div className="space-y-4 border-t pt-6">
+        <Label className="text-lg font-semibold">Treatments & Disclosure</Label>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="flex items-center gap-2"><Switch checked={treatments.heat} onCheckedChange={(v)=>setTreatments({...treatments, heat:v})} /><span>Heat</span></div>
+          <div className="flex items-center gap-2"><Switch checked={treatments.oil} onCheckedChange={(v)=>setTreatments({...treatments, oil:v})} /><span>Oil</span></div>
+          <div className="flex items-center gap-2"><Switch checked={treatments.diffusion} onCheckedChange={(v)=>setTreatments({...treatments, diffusion:v})} /><span>Diffusion</span></div>
+          <Input placeholder="Other notes" value={treatments.other} onChange={(e)=>setTreatments({...treatments, other:e.target.value})} className="input-modern" />
+        </div>
+        <div className="flex items-center gap-2">
+          <Switch checked={discloseTreatments} onCheckedChange={setDiscloseTreatments} id="disclose" />
+          <Label htmlFor="disclose">Include treatment disclosure on invoices</Label>
+        </div>
+      </div>
+
+      {/* Reorder Rules */}
+      <div className="space-y-4 border-t pt-6">
+        <Label className="text-lg font-semibold">Reorder Rules</Label>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+          <Input value={reorderRules.type} onChange={(e)=>setReorderRules({...reorderRules, type:e.target.value})} placeholder="Type" className="input-modern" />
+          <Select value={reorderRules.grade} onValueChange={(v)=>setReorderRules({...reorderRules, grade:v})}>
+            <SelectTrigger className="input-modern"><SelectValue placeholder="Grade" /></SelectTrigger>
+            <SelectContent>
+              {GRADES.map(g=> <SelectItem key={g} value={g}>{g}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Input value={reorderRules.origin} onChange={(e)=>setReorderRules({...reorderRules, origin:e.target.value})} placeholder="Origin" className="input-modern" />
+          <Input type="number" value={reorderRules.minStock} onChange={(e)=>setReorderRules({...reorderRules, minStock: Number(e.target.value) || 0})} placeholder="Min Stock" className="input-modern" />
+          <Input type="number" value={reorderRules.reorderQty} onChange={(e)=>setReorderRules({...reorderRules, reorderQty: Number(e.target.value) || 0})} placeholder="Reorder Qty" className="input-modern" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <Select value={reorderRules.preferredSupplierId} onValueChange={(v)=>setReorderRules({...reorderRules, preferredSupplierId:v})}>
+            <SelectTrigger className="input-modern"><SelectValue placeholder="Preferred Supplier" /></SelectTrigger>
+            <SelectContent>
+              {suppliers.map((s:any)=>(<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       <div>
         <Label htmlFor="description">Description</Label>
         <Textarea
@@ -962,4 +1366,49 @@ function GemstoneForm({ gemstone, onSubmit, onCancel }: any) {
     </div>
     </form>
   );
+}
+
+// Helpers for label actions
+function renderLabelIntoElements(item: any, qrElementId: string, barcodeElementId: string) {
+  const qr = document.getElementById(qrElementId) as HTMLCanvasElement | null;
+  if (qr) {
+    try { QRCode.toCanvas(qr, item.gemId || item.id || '', { width: 160 }); } catch {}
+  }
+  const svg = document.getElementById(barcodeElementId) as SVGSVGElement | null;
+  if (svg) {
+    try {
+      // @ts-ignore
+      JsBarcode(svg, item.gemId || item.id || '', { format: 'code128', height: 40, displayValue: false, margin: 0 });
+    } catch {}
+  }
+}
+
+function printLabel(item: any) {
+  // Render to canvases first
+  renderLabelIntoElements(item, 'qr-canvas', 'barcode-svg');
+  const w = window.open('', '_blank');
+  if (!w) return;
+  const qrDataUrl = (document.getElementById('qr-canvas') as HTMLCanvasElement)?.toDataURL() || '';
+  const barcodeSvg = (document.getElementById('barcode-svg') as SVGSVGElement)?.outerHTML || '';
+  w.document.write(`<html><head><title>Label</title><style>body{font-family:system-ui;margin:16px} .center{text-align:center}</style></head><body>
+    <div class="center">
+      <div style="font-weight:600">${item.type} • ${item.grade}</div>
+      <div style="font-size:12px;color:#666">${item.gemId}</div>
+      <img src="${qrDataUrl}" style="width:160px;height:160px;"/>
+      ${barcodeSvg}
+    </div>
+  </body></html>`);
+  w.document.close();
+  w.focus();
+  w.print();
+}
+
+function downloadLabel(item: any) {
+  renderLabelIntoElements(item, 'qr-canvas', 'barcode-svg');
+  const canvas = document.getElementById('qr-canvas') as HTMLCanvasElement | null;
+  if (!canvas) return;
+  const link = document.createElement('a');
+  link.download = `${item.gemId || 'label'}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
 }

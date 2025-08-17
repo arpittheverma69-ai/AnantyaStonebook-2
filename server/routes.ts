@@ -716,6 +716,243 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Profile management endpoints
+  app.get("/api/profile/:userId", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      
+      // Get user from Supabase auth using the authorization header
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const token = authHeader.split(' ')[1];
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      
+      if (authError || !user || user.id !== userId) {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+
+      // Get profile data from users table
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      // Combine user data with metadata
+      const profileData = {
+        id: user.id,
+        email: user.email,
+        fullName: user.user_metadata?.full_name || userData?.full_name || "",
+        role: user.user_metadata?.role || userData?.role || "Member",
+        phone: user.user_metadata?.phone || userData?.phone || "",
+        address: user.user_metadata?.address || userData?.address || "",
+        city: user.user_metadata?.city || userData?.city || "",
+        state: user.user_metadata?.state || userData?.state || "",
+        businessName: user.user_metadata?.business_name || userData?.business_name || "",
+        specialization: user.user_metadata?.specialization || userData?.specialization || "",
+        experience: user.user_metadata?.experience || userData?.experience || "",
+        bio: user.user_metadata?.bio || userData?.bio || "",
+        avatar: user.user_metadata?.avatar || userData?.avatar || "",
+        preferences: user.user_metadata?.preferences || userData?.preferences || {
+          theme: "light",
+          notifications: true,
+          language: "en"
+        }
+      };
+
+      res.json(profileData);
+    } catch (error) {
+      console.error('Profile fetch error:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/profile", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const token = authHeader.split(' ')[1];
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      
+      if (authError || !user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const profileData = req.body;
+      
+      // Store in users table first - handle missing columns gracefully
+      try {
+        const updateData: any = {
+          id: user.id,
+          username: profileData.fullName || user.email,
+          updated_at: new Date().toISOString()
+        };
+
+        // Only include fields that exist in the current schema
+        if (profileData.fullName) updateData.full_name = profileData.fullName;
+        if (profileData.role) updateData.role = profileData.role;
+        if (profileData.phone) updateData.phone = profileData.phone;
+        if (profileData.address) updateData.address = profileData.address;
+        if (profileData.city) updateData.city = profileData.city;
+        if (profileData.state) updateData.state = profileData.state;
+        if (profileData.businessName) updateData.business_name = profileData.businessName;
+        if (profileData.specialization) updateData.specialization = profileData.specialization;
+        if (profileData.experience) updateData.experience = profileData.experience;
+        if (profileData.bio) updateData.bio = profileData.bio;
+        if (profileData.avatar) updateData.avatar = profileData.avatar;
+        if (profileData.preferences) updateData.preferences = JSON.stringify(profileData.preferences);
+
+        const { error: dbError } = await supabase
+          .from('users')
+          .upsert(updateData, {
+            onConflict: 'id'
+          });
+
+        if (dbError) {
+          console.error('Database update error:', dbError);
+          // Try a simpler update approach
+          const { error: simpleError } = await supabase
+            .from('users')
+            .upsert({
+              id: user.id,
+              username: profileData.fullName || user.email,
+              full_name: profileData.fullName,
+              role: profileData.role,
+              updated_at: new Date().toISOString()
+            }, {
+              onConflict: 'id'
+            });
+
+          if (simpleError) {
+            console.error('Simple database update error:', simpleError);
+            return res.status(500).json({ message: "Failed to update profile in database" });
+          }
+        }
+      } catch (dbError) {
+        console.error('Database error:', dbError);
+        // Continue even if database update fails
+      }
+
+      // Try to update auth metadata for essential fields only
+      try {
+        const { error: updateError } = await supabase.auth.updateUser({
+          data: {
+            full_name: profileData.fullName,
+            role: profileData.role
+          }
+        });
+
+        if (updateError) {
+          console.error('Auth update error:', updateError);
+          // Don't fail the request if auth update fails
+        }
+      } catch (authError) {
+        console.error('Auth update error:', authError);
+        // Continue even if auth update fails
+      }
+
+      res.json({ message: "Profile updated successfully" });
+    } catch (error) {
+      console.error('Profile update error:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/profile", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const token = authHeader.split(' ')[1];
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      
+      if (authError || !user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const profileData = req.body;
+      
+      // Store in users table first - handle missing columns gracefully
+      try {
+        const updateData: any = {
+          updated_at: new Date().toISOString()
+        };
+
+        // Only include fields that exist in the current schema
+        if (profileData.fullName) updateData.full_name = profileData.fullName;
+        if (profileData.role) updateData.role = profileData.role;
+        if (profileData.phone) updateData.phone = profileData.phone;
+        if (profileData.address) updateData.address = profileData.address;
+        if (profileData.city) updateData.city = profileData.city;
+        if (profileData.state) updateData.state = profileData.state;
+        if (profileData.businessName) updateData.business_name = profileData.businessName;
+        if (profileData.specialization) updateData.specialization = profileData.specialization;
+        if (profileData.experience) updateData.experience = profileData.experience;
+        if (profileData.bio) updateData.bio = profileData.bio;
+        if (profileData.avatar) updateData.avatar = profileData.avatar;
+        if (profileData.preferences) updateData.preferences = JSON.stringify(profileData.preferences);
+
+        const { error: dbError } = await supabase
+          .from('users')
+          .update(updateData)
+          .eq('id', user.id);
+
+        if (dbError) {
+          console.error('Database update error:', dbError);
+          // Try a simpler update approach
+          const { error: simpleError } = await supabase
+            .from('users')
+            .update({
+              username: profileData.fullName || user.email,
+              full_name: profileData.fullName,
+              role: profileData.role,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', user.id);
+
+          if (simpleError) {
+            console.error('Simple database update error:', simpleError);
+            return res.status(500).json({ message: "Failed to update profile in database" });
+          }
+        }
+      } catch (dbError) {
+        console.error('Database error:', dbError);
+        // Continue even if database update fails
+      }
+
+      // Try to update auth metadata for essential fields only
+      try {
+        const { error: updateError } = await supabase.auth.updateUser({
+          data: {
+            full_name: profileData.fullName,
+            role: profileData.role
+          }
+        });
+
+        if (updateError) {
+          console.error('Auth update error:', updateError);
+          // Don't fail the request if auth update fails
+        }
+      } catch (authError) {
+        console.error('Auth update error:', authError);
+        // Continue even if auth update fails
+      }
+
+      res.json({ message: "Profile updated successfully" });
+    } catch (error) {
+      console.error('Profile update error:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // File serving route
   app.get("/api/files/:filename", (req, res) => {
     const filename = req.params.filename;

@@ -11,6 +11,7 @@ import { insertTaskSchema, type Task, type InsertTask, type Client, type Supplie
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { PRIORITY_LEVELS, TASK_STATUS } from "@/lib/constants";
+import { createGoogleCalendarEvent } from "@/lib/google-calendar";
 
 interface TaskFormProps {
   task?: Task | null;
@@ -41,7 +42,7 @@ export default function TaskForm({ task, onClose }: TaskFormProps) {
       relatedTo: task.relatedTo || "",
       relatedType: task.relatedType || "",
       assignedTo: task.assignedTo || "",
-      dueDate: task.dueDate,
+      dueDate: task.dueDate || undefined,
       priority: task.priority || "Medium",
       status: task.status || "Pending",
       completed: task.completed || false,
@@ -64,7 +65,7 @@ export default function TaskForm({ task, onClose }: TaskFormProps) {
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertTask) => {
-      return apiRequest("POST", "/api/tasks", data);
+      return apiRequest("/api/tasks", { method: "POST", body: data });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
@@ -86,7 +87,7 @@ export default function TaskForm({ task, onClose }: TaskFormProps) {
 
   const updateMutation = useMutation({
     mutationFn: async (data: InsertTask) => {
-      return apiRequest("PATCH", `/api/tasks/${task!.id}`, data);
+      return apiRequest(`/api/tasks/${task!.id}`, { method: "PATCH", body: data });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
@@ -105,11 +106,11 @@ export default function TaskForm({ task, onClose }: TaskFormProps) {
     },
   });
 
-  const onSubmit = (data: InsertTask) => {
+  const onSubmit = async (data: InsertTask) => {
     // Convert date string to Date object if it exists
     const processedData = {
       ...data,
-      dueDate: data.dueDate ? new Date(data.dueDate as string) : undefined
+      dueDate: data.dueDate ? new Date(data.dueDate) : undefined
     };
     
     console.log("Form data being sent:", processedData);
@@ -118,6 +119,28 @@ export default function TaskForm({ task, onClose }: TaskFormProps) {
       updateMutation.mutate(processedData);
     } else {
       createMutation.mutate(processedData);
+    }
+
+    // Create Google Calendar event if due date exists
+    try {
+      if (processedData.dueDate) {
+        const start = processedData.dueDate as Date;
+        const end = new Date(start.getTime() + 60 * 60 * 1000);
+        await createGoogleCalendarEvent({
+          summary: processedData.title,
+          description: processedData.description || undefined,
+          start,
+          end,
+        });
+        toast({ title: "Calendar Event", description: "Event added to your Google Calendar" });
+      }
+    } catch (err: any) {
+      console.error('Calendar create error', err);
+      if (import.meta.env.VITE_GOOGLE_CLIENT_ID) {
+        toast({ title: "Calendar Error", description: err?.message || 'Failed to add event', variant: 'destructive' });
+      } else {
+        toast({ title: "Calendar Not Configured", description: "Set VITE_GOOGLE_CLIENT_ID in .env to enable Calendar", variant: 'destructive' });
+      }
     }
   };
 
@@ -130,7 +153,7 @@ export default function TaskForm({ task, onClose }: TaskFormProps) {
       case 'Supplier':
         return suppliers.map(supplier => ({ id: supplier.id, name: supplier.name }));
       case 'Stone':
-        return inventory.map(item => ({ id: item.id, name: `${item.type} (${item.stoneId})` }));
+        return inventory.map(item => ({ id: item.id, name: `${item.type} (${item.gemId})` }));
       default:
         return [];
     }

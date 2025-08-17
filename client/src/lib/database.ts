@@ -58,6 +58,10 @@ function toSnakeCaseInventory(input: any) {
     package_type: input.packageType,
     notes: input.notes,
     tags: input.tags,
+    treatments: input.treatments ?? input.extended?.treatments ?? null,
+    disclose_treatments: input.discloseTreatments ?? input.extended?.discloseTreatments ?? false,
+    media: input.media ?? input.extended?.media ?? null,
+    reorder_rules: input.reorderRules ?? input.extended?.reorderRules ?? null,
     created_at: input.createdAt,
     updated_at: input.updatedAt,
   }
