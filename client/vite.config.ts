@@ -32,4 +32,11 @@ export default defineConfig({
       },
     },
   },
+  optimizeDeps: {
+    include: ['react', 'react-dom', '@vitejs/plugin-react'],
+    exclude: ['fsevents']
+  },
+  define: {
+    global: 'globalThis',
+  }
 })

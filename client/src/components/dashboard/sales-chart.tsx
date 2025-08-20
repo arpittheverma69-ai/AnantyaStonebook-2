@@ -26,6 +26,21 @@ export default function SalesChart() {
       daysToShow: daysToShow
     });
     
+    // Determine how many data points to show based on time range
+    let dataPoints: number;
+    let groupBy: 'day' | 'week' | 'month';
+    
+    if (timeRange === '7days') {
+      dataPoints = 7;
+      groupBy = 'day';
+    } else if (timeRange === '30days') {
+      dataPoints = 10; // Show 10 data points instead of 30
+      groupBy = 'day';
+    } else {
+      dataPoints = 12; // Show 12 weeks for 90 days
+      groupBy = 'week';
+    }
+    
     // Generate array of dates for the time range
     const dates = [];
     for (let i = daysToShow - 1; i >= 0; i--) {
@@ -34,53 +49,112 @@ export default function SalesChart() {
       dates.push(date);
     }
 
-    // Process each date
-    return dates.map(date => {
-      // Find sales for this specific date
-      const daySales = sales.filter(sale => {
-        // Use created_at if date is not available (for backward compatibility)
+    // Group dates based on the grouping strategy
+    let groupedData: Array<{ startDate: Date; endDate: Date; dates: Date[] }> = [];
+    
+    if (groupBy === 'day') {
+      // For daily grouping, take every nth day to reduce data points
+      const step = Math.ceil(dates.length / dataPoints);
+      for (let i = 0; i < dates.length; i += step) {
+        const groupDates = dates.slice(i, i + step);
+        groupedData.push({
+          startDate: groupDates[0],
+          endDate: groupDates[groupDates.length - 1],
+          dates: groupDates
+        });
+      }
+    } else if (groupBy === 'week') {
+      // Group by weeks
+      for (let i = 0; i < dates.length; i += 7) {
+        const groupDates = dates.slice(i, i + 7);
+        groupedData.push({
+          startDate: groupDates[0],
+          endDate: groupDates[groupDates.length - 1],
+          dates: groupDates
+        });
+      }
+    }
+
+    // Process each group
+    return groupedData.map((group, groupIndex) => {
+      // Find sales for this date range
+      const groupSales = sales.filter(sale => {
         const saleDateField = sale.date || sale.createdAt;
         if (!saleDateField) return false;
         
         const saleDate = new Date(saleDateField);
         
-        // Compare dates by setting time to start of day
+        // Normalize dates to start of day for comparison
         const saleDay = new Date(saleDate.getFullYear(), saleDate.getMonth(), saleDate.getDate());
-        const targetDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        const groupStartDay = new Date(group.startDate.getFullYear(), group.startDate.getMonth(), group.startDate.getDate());
+        const groupEndDay = new Date(group.endDate.getFullYear(), group.endDate.getMonth(), group.endDate.getDate());
         
-        const matches = saleDay.getTime() === targetDay.getTime();
+        // Check if sale is within this group's date range
+        const isInRange = saleDay >= groupStartDay && saleDay <= groupEndDay;
         
-        // Debug log for each date comparison
-        if (matches) {
-          console.log('Found matching sale:', {
+        // Debug logging for sales matching
+        if (isInRange) {
+          console.log('Sale matched to group:', {
+            groupIndex,
             saleId: sale.id,
-            saleDateField,
+            saleDate: saleDate.toDateString(),
             saleDay: saleDay.toDateString(),
-            targetDay: targetDay.toDateString(),
+            groupStart: groupStartDay.toDateString(),
+            groupEnd: groupEndDay.toDateString(),
             amount: sale.totalAmount
           });
         }
         
-        return matches;
+        return isInRange;
       });
 
-      // Calculate total amount for this day
-      const totalAmount = daySales.reduce((sum, sale) => {
-        return sum + parseFloat(sale.totalAmount || '0');
+      // Calculate total amount for this group
+      const totalAmount = groupSales.reduce((sum, sale) => {
+        const amount = parseFloat(sale.totalAmount || '0');
+        console.log('Adding sale amount:', { saleId: sale.id, amount, runningTotal: sum + amount });
+        return sum + amount;
       }, 0);
 
-      return {
-        date: date,
-        displayDate: date.toLocaleDateString('en-IN', { 
-          weekday: timeRange === '7days' ? 'short' : 'short',
-          month: timeRange === '7days' ? undefined : 'short',
-          day: timeRange === '7days' ? undefined : 'numeric'
-        }),
+      // Create display date based on grouping
+      let displayDate: string;
+      if (groupBy === 'day') {
+        if (group.dates.length === 1) {
+          displayDate = group.startDate.toLocaleDateString('en-IN', { 
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric'
+          });
+        } else {
+          displayDate = `${group.startDate.getDate()}-${group.endDate.getDate()} ${group.startDate.toLocaleDateString('en-IN', { month: 'short' })}`;
+        }
+      } else {
+        displayDate = `Week ${groupIndex + 1}`;
+      }
+
+      const result = {
+        date: group.startDate,
+        displayDate: displayDate,
         amount: totalAmount,
-        count: daySales.length,
-        sales: daySales
+        count: groupSales.length,
+        sales: groupSales
       };
+
+      console.log('Group result:', {
+        groupIndex,
+        displayDate,
+        totalAmount,
+        salesCount: groupSales.length,
+        sales: groupSales.map(s => ({ id: s.id, amount: s.totalAmount }))
+      });
+
+      return result;
     });
+    
+    console.log('Final chart data:', chartData.map(d => ({
+      displayDate: d.displayDate,
+      amount: d.amount,
+      count: d.count
+    })));
   }, [sales, timeRange]);
 
   // Calculate metrics
@@ -193,13 +267,22 @@ export default function SalesChart() {
               </div>
               
               {/* Chart bars */}
-              <div className="flex-1 flex items-end justify-between gap-1 ml-12">
+              <div className="flex-1 flex items-end justify-between gap-2 ml-12">
                 {chartData.map((day, index) => {
                   const barHeight = chartMax > 0 ? (day.amount / chartMax) * 100 : 0;
                   const hasSales = day.amount > 0;
                   
+                  console.log('Bar calculation:', {
+                    index,
+                    displayDate: day.displayDate,
+                    amount: day.amount,
+                    chartMax,
+                    barHeight: `${barHeight}%`,
+                    hasSales
+                  });
+                  
                   return (
-                    <div key={index} className="flex-1 flex flex-col items-center">
+                    <div key={index} className="flex-1 flex flex-col items-center min-w-0">
                       <div className="w-full bg-gradient-to-t from-primary/20 to-primary/40 rounded-t-lg relative group h-full">
                         <div 
                           className={`rounded-t-lg transition-all duration-300 group-hover:from-primary/90 group-hover:to-primary w-full ${
@@ -217,8 +300,10 @@ export default function SalesChart() {
                           <div className="text-muted-foreground">{day.count} sales</div>
                         </div>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-2 text-center">{day.displayDate}</p>
-                      <p className="text-xs text-muted-foreground">{day.count} sales</p>
+                      <p className="text-xs text-muted-foreground mt-2 text-center truncate w-full">{day.displayDate}</p>
+                      {day.count > 0 && (
+                        <p className="text-xs text-primary font-medium">{day.count} sales</p>
+                      )}
                     </div>
                   );
                 })}

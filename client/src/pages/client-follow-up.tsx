@@ -155,7 +155,7 @@ export default function ClientFollowUp() {
         dueDate: created.dueDate,
         priority: created.priority,
       }, ...prev]);
-      setShowNewFollowUp(false);
+    setShowNewFollowUp(false);
       setNewFollowUp({ clientId: '', type: 'call', priority: 'Medium', scheduledDate: new Date(), notes: '' });
       toast({ title: 'Follow-up added' });
     } catch (e:any) {
@@ -222,23 +222,23 @@ export default function ClientFollowUp() {
                         {task.status}
                       </Badge>
                     </div>
-
+                    
                     <div className="flex items-center space-x-4 text-sm text-gray-600">
                       <div className="flex items-center space-x-1">
                         {getTypeIcon('call')}
                         <span className="capitalize">Due</span>
                       </div>
                       {task.dueDate && (
-                        <div className="flex items-center space-x-1">
-                          <CalendarIcon className="h-4 w-4" />
+                      <div className="flex items-center space-x-1">
+                        <CalendarIcon className="h-4 w-4" />
                           <span>{format(new Date(task.dueDate), 'MMM dd, yyyy')}</span>
-                        </div>
+                      </div>
                       )}
                     </div>
-
+                    
                     {task.notes && <p className="text-sm text-gray-700">{task.notes}</p>}
                   </div>
-
+                  
                   <div className="flex space-x-2">
                     {task.status === 'Pending' && (
                       <>
@@ -303,7 +303,7 @@ export default function ClientFollowUp() {
                   </SelectContent>
                 </Select>
               </div>
-
+              
               <div className="space-y-2">
                 <Label>Follow-up Type</Label>
                 <Select value={newFollowUp.type} onValueChange={(value: any) => setNewFollowUp(prev => ({ ...prev, type: value }))}>
@@ -317,7 +317,7 @@ export default function ClientFollowUp() {
                   </SelectContent>
                 </Select>
               </div>
-
+              
               <div className="space-y-2">
                 <Label>Priority</Label>
                 <Select value={newFollowUp.priority} onValueChange={(value: any) => setNewFollowUp(prev => ({ ...prev, priority: value }))}>
@@ -331,7 +331,7 @@ export default function ClientFollowUp() {
                   </SelectContent>
                 </Select>
               </div>
-
+              
               <div className="space-y-2">
                 <Label>Scheduled Date</Label>
                 <Popover>
@@ -351,7 +351,7 @@ export default function ClientFollowUp() {
                   </PopoverContent>
                 </Popover>
               </div>
-
+              
               <div className="space-y-2">
                 <Label>Notes</Label>
                 <Textarea 
@@ -360,7 +360,7 @@ export default function ClientFollowUp() {
                   onChange={(e) => setNewFollowUp(prev => ({ ...prev, notes: e.target.value }))}
                 />
               </div>
-
+              
               <div className="flex space-x-2">
                 <Button onClick={addFollowUp} className="flex-1">Add Follow-up</Button>
                 <Button variant="outline" onClick={() => setShowNewFollowUp(false)}>Cancel</Button>

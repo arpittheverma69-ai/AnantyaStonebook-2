@@ -881,16 +881,16 @@ export default function Sales() {
         }
         
         await saleService.delete(id);
-        setSales(sales.filter(sale => sale.id !== id));
+      setSales(sales.filter(sale => sale.id !== id));
         
         // Reload inventory data
         const inventoryData = await inventoryService.getAll();
         setInventory(inventoryData);
         
-        toast({
-          title: "Success",
+      toast({
+        title: "Success",
           description: "Sale deleted successfully and inventory restored",
-        });
+      });
       } catch (error) {
         console.error('Error deleting sale:', error);
         toast({
@@ -923,153 +923,153 @@ export default function Sales() {
 
   return (
     <>
-      <div className="space-y-4 md:space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground">Sales Management</h1>
-            <p className="text-muted-foreground text-sm md:text-base">Track your sales, generate invoices, and manage payments</p>
-          </div>
-          <Button onClick={() => setIsFormOpen(true)} className="btn-modern bg-gradient-to-r from-primary to-purple-600 w-full sm:w-auto">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Sale
-          </Button>
+    <div className="space-y-4 md:space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Sales Management</h1>
+          <p className="text-muted-foreground text-sm md:text-base">Track your sales, generate invoices, and manage payments</p>
         </div>
-
-        {/* Filters and Search */}
-        <Card className="card-shadow-lg bg-gradient-to-br from-background to-muted/20 border-0">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-xl font-semibold">Sales Transactions</CardTitle>
-              <div className="flex items-center space-x-4">
-                <Select value={selectedPaymentStatus} onValueChange={setSelectedPaymentStatus}>
-                  <SelectTrigger className="w-40 input-modern">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    {PAYMENT_STATUSES.map(status => (
-                      <SelectItem key={status} value={status}>{status}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {/* Search */}
-            <div className="flex items-center space-x-4 mb-6">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                <Input
-                  placeholder="Search by Sale ID, client name, firm name..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 input-modern"
-                />
-              </div>
-            </div>
-
-            {/* Results Count */}
-            <div className="mb-4">
-              <p className="text-muted-foreground">
-                Showing {filteredSales.length} of {sales.length} sales
-              </p>
-            </div>
-
-            {/* Content */}
-            {filteredSales.length === 0 ? (
-              <div className="text-center py-12">
-                <ShoppingCart className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-xl font-medium text-foreground mb-2">No sales found</h3>
-                <p className="text-muted-foreground mb-4">
-                  {searchQuery ? "No sales match your search criteria" : "Get started by recording your first sale"}
-                </p>
-                {!searchQuery && (
-                  <Button onClick={() => setIsFormOpen(true)} className="btn-modern">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Record Your First Sale
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table className="table-modern">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Sale ID</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Client Name</TableHead>
-                      <TableHead>Firm/Company</TableHead>
-                      <TableHead>Items</TableHead>
-                      <TableHead>Total Amount</TableHead>
-                      <TableHead>Payment Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredSales.map((sale) => (
-                      <TableRow 
-                        key={sale.id} 
-                        className="cursor-pointer hover:bg-muted/50 transition-colors"
-                        onClick={() => handleSaleClick(sale)}
-                      >
-                        <TableCell className="font-medium">{sale.saleId}</TableCell>
-                        <TableCell>{formatDate(sale.date)}</TableCell>
-                        <TableCell>{sale.clientName}</TableCell>
-                        <TableCell>{sale.firmName || '-'}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {sale.items?.map((item, index) => (
-                              <Badge key={index} variant="outline" className="text-xs">
-                                {item.stoneName} ({item.carat}ct)
-                              </Badge>
-                            )) || '-'}
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-semibold">
-                          {formatCurrency(parseFloat(sale.totalAmount))}
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getPaymentStatusColor(sale.paymentStatus)}>
-                            {sale.paymentStatus}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center space-x-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEdit(sale);
-                              }}
-                              className="btn-modern"
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDelete(sale.id);
-                              }}
-                              className="btn-modern text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <Button onClick={() => setIsFormOpen(true)} className="btn-modern bg-gradient-to-r from-primary to-purple-600 w-full sm:w-auto">
+          <Plus className="h-4 w-4 mr-2" />
+          Add Sale
+        </Button>
       </div>
+
+      {/* Filters and Search */}
+      <Card className="card-shadow-lg bg-gradient-to-br from-background to-muted/20 border-0">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-xl font-semibold">Sales Transactions</CardTitle>
+            <div className="flex items-center space-x-4">
+              <Select value={selectedPaymentStatus} onValueChange={setSelectedPaymentStatus}>
+                <SelectTrigger className="w-40 input-modern">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  {PAYMENT_STATUSES.map(status => (
+                    <SelectItem key={status} value={status}>{status}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* Search */}
+          <div className="flex items-center space-x-4 mb-6">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+              <Input
+                placeholder="Search by Sale ID, client name, firm name..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 input-modern"
+              />
+            </div>
+          </div>
+
+          {/* Results Count */}
+          <div className="mb-4">
+            <p className="text-muted-foreground">
+              Showing {filteredSales.length} of {sales.length} sales
+            </p>
+          </div>
+
+          {/* Content */}
+          {filteredSales.length === 0 ? (
+            <div className="text-center py-12">
+              <ShoppingCart className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-xl font-medium text-foreground mb-2">No sales found</h3>
+              <p className="text-muted-foreground mb-4">
+                {searchQuery ? "No sales match your search criteria" : "Get started by recording your first sale"}
+              </p>
+              {!searchQuery && (
+                <Button onClick={() => setIsFormOpen(true)} className="btn-modern">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Record Your First Sale
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table className="table-modern">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Sale ID</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Client Name</TableHead>
+                    <TableHead>Firm/Company</TableHead>
+                    <TableHead>Items</TableHead>
+                    <TableHead>Total Amount</TableHead>
+                    <TableHead>Payment Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredSales.map((sale) => (
+                    <TableRow 
+                      key={sale.id} 
+                      className="cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => handleSaleClick(sale)}
+                    >
+                      <TableCell className="font-medium">{sale.saleId}</TableCell>
+                      <TableCell>{formatDate(sale.date)}</TableCell>
+                      <TableCell>{sale.clientName}</TableCell>
+                      <TableCell>{sale.firmName || '-'}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {sale.items?.map((item, index) => (
+                            <Badge key={index} variant="outline" className="text-xs">
+                              {item.stoneName} ({item.carat}ct)
+                            </Badge>
+                          )) || '-'}
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-semibold">
+                        {formatCurrency(parseFloat(sale.totalAmount))}
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={getPaymentStatusColor(sale.paymentStatus)}>
+                          {sale.paymentStatus}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEdit(sale);
+                            }}
+                            className="btn-modern"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(sale.id);
+                            }}
+                            className="btn-modern text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
 
       {/* Add/Edit Sale Dialog */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
