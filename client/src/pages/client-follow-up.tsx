@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,30 +10,34 @@ import { Separator } from '@/components/ui/separator';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
-import { CalendarIcon, Phone, Mail, MessageCircle, MapPin, Bell, Users, Star, Clock, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
+import { CalendarIcon, Phone, Mail, MessageCircle, MapPin, Bell, Users, Star, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { clientService, taskService } from '@/lib/database';
+import { useToast } from '@/hooks/use-toast';
 
-interface FollowUp {
+interface FollowUpTask {
   id: string;
-  clientName: string;
-  type: 'call' | 'email' | 'whatsapp' | 'visit' | 'reminder';
-  priority: 'low' | 'medium' | 'high';
-  status: 'pending' | 'completed' | 'overdue';
-  scheduledDate: Date;
-  notes: string;
-  lastContact: Date;
-  nextFollowUp: Date;
+  title: string;
+  status: 'Pending' | 'In Progress' | 'Completed' | 'Overdue';
+  description?: string | null;
+  notes?: string | null;
+  relatedTo?: string | null; // client id
+  relatedType?: string | null; // 'Client'
+  assignedTo?: string | null;
+  dueDate?: string | null; // ISO string
+  priority?: 'High' | 'Medium' | 'Low' | null;
 }
 
-interface Client {
+interface ClientItem {
   id: string;
   name: string;
-  email: string;
-  phone: string;
-  loyaltyPoints: number;
-  tier: 'Bronze' | 'Silver' | 'Gold' | 'Platinum';
-  lastPurchase: Date;
-  totalSpent: number;
+  email?: string | null;
+  phone?: string | null;
+  loyaltyLevel?: string | null;
+  businessName?: string | null;
+  city?: string | null;
+  totalSpent?: number; // computed
+  lastPurchase?: string | null;
 }
 
 const followUpTypes = [
@@ -45,104 +49,77 @@ const followUpTypes = [
 ];
 
 const priorities = [
-  { value: 'low', label: 'Low', color: 'bg-gray-100 text-gray-800' },
-  { value: 'medium', label: 'Medium', color: 'bg-yellow-100 text-yellow-800' },
-  { value: 'high', label: 'High', color: 'bg-red-100 text-red-800' }
+  { value: 'Low', label: 'Low', color: 'bg-gray-100 text-gray-800' },
+  { value: 'Medium', label: 'Medium', color: 'bg-yellow-100 text-yellow-800' },
+  { value: 'High', label: 'High', color: 'bg-red-100 text-red-800' }
 ];
 
 const statuses = [
-  { value: 'pending', label: 'Pending', color: 'bg-blue-100 text-blue-800' },
-  { value: 'completed', label: 'Completed', color: 'bg-green-100 text-green-800' },
-  { value: 'overdue', label: 'Overdue', color: 'bg-red-100 text-red-800' }
-];
-
-// Simulated data
-const mockFollowUps: FollowUp[] = [
-  {
-    id: '1',
-    clientName: 'Rajesh Kumar',
-    type: 'call',
-    priority: 'high',
-    status: 'pending',
-    scheduledDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
-    notes: 'Follow up on Ruby inquiry from last week',
-    lastContact: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-    nextFollowUp: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
-  },
-  {
-    id: '2',
-    clientName: 'Priya Sharma',
-    type: 'whatsapp',
-    priority: 'medium',
-    status: 'completed',
-    scheduledDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-    notes: 'Sent sapphire collection photos',
-    lastContact: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-    nextFollowUp: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)
-  },
-  {
-    id: '3',
-    clientName: 'Amit Patel',
-    type: 'visit',
-    priority: 'high',
-    status: 'overdue',
-    scheduledDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-    notes: 'Show new emerald collection',
-    lastContact: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
-    nextFollowUp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
-  }
-];
-
-const mockClients: Client[] = [
-  {
-    id: '1',
-    name: 'Rajesh Kumar',
-    email: 'rajesh@email.com',
-    phone: '+91 98765 43210',
-    loyaltyPoints: 1250,
-    tier: 'Gold',
-    lastPurchase: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
-    totalSpent: 850000
-  },
-  {
-    id: '2',
-    name: 'Priya Sharma',
-    email: 'priya@email.com',
-    phone: '+91 98765 43211',
-    loyaltyPoints: 850,
-    tier: 'Silver',
-    lastPurchase: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-    totalSpent: 450000
-  },
-  {
-    id: '3',
-    name: 'Amit Patel',
-    email: 'amit@email.com',
-    phone: '+91 98765 43212',
-    loyaltyPoints: 2100,
-    tier: 'Platinum',
-    lastPurchase: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-    totalSpent: 1200000
-  }
+  { value: 'Pending', label: 'Pending', color: 'bg-blue-100 text-blue-800' },
+  { value: 'Completed', label: 'Completed', color: 'bg-green-100 text-green-800' },
+  { value: 'Overdue', label: 'Overdue', color: 'bg-red-100 text-red-800' }
 ];
 
 export default function ClientFollowUp() {
-  const [followUps, setFollowUps] = useState<FollowUp[]>(mockFollowUps);
-  const [clients] = useState<Client[]>(mockClients);
-  const [selectedDate, setSelectedDate] = useState<Date>();
+  const { toast } = useToast();
+  const [tasks, setTasks] = useState<FollowUpTask[]>([]);
+  const [clients, setClients] = useState<ClientItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showNewFollowUp, setShowNewFollowUp] = useState(false);
   const [newFollowUp, setNewFollowUp] = useState({
-    clientName: '',
+    clientId: '',
     type: 'call' as const,
-    priority: 'medium' as const,
+    priority: 'Medium' as const,
     scheduledDate: new Date(),
     notes: ''
   });
 
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const [clientRows, taskRows] = await Promise.all([
+          clientService.getAll(),
+          taskService.getAll(),
+        ]);
+        setClients(clientRows.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          email: c.email,
+          phone: c.phone,
+          loyaltyLevel: c.loyaltyLevel,
+          businessName: c.businessName,
+          city: c.city,
+        })));
+        setTasks(taskRows.map((t: any) => ({
+          id: t.id,
+          title: t.title || 'Follow-up',
+          status: (t.status || 'Pending') as FollowUpTask['status'],
+          description: t.description,
+          notes: t.notes,
+          relatedTo: t.relatedTo,
+          relatedType: t.relatedType,
+          assignedTo: t.assignedTo,
+          dueDate: t.dueDate,
+          priority: (t.priority || 'Medium') as FollowUpTask['priority'],
+        })));
+      } catch (e:any) {
+        console.error(e);
+        toast({ title: 'Error', description: 'Failed to load follow-ups/clients', variant: 'destructive' });
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [toast]);
+
+  const pendingCount = useMemo(() => tasks.filter(t => t.status === 'Pending').length, [tasks]);
+  const overdueCount = useMemo(() => tasks.filter(t => t.status === 'Overdue').length, [tasks]);
+  const completedCount = useMemo(() => tasks.filter(t => t.status === 'Completed').length, [tasks]);
+
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'completed': return <CheckCircle className="h-4 w-4 text-green-600" />;
-      case 'overdue': return <AlertCircle className="h-4 w-4 text-red-600" />;
+      case 'Completed': return <CheckCircle className="h-4 w-4 text-green-600" />;
+      case 'Overdue': return <AlertCircle className="h-4 w-4 text-red-600" />;
       default: return <Clock className="h-4 w-4 text-blue-600" />;
     }
   };
@@ -152,44 +129,56 @@ export default function ClientFollowUp() {
     return typeConfig ? <typeConfig.icon className="h-4 w-4" /> : null;
   };
 
-  const addFollowUp = () => {
-    const followUp: FollowUp = {
-      id: Date.now().toString(),
-      ...newFollowUp,
-      status: 'pending',
-      lastContact: new Date(),
-      nextFollowUp: newFollowUp.scheduledDate
-    };
-    
-    setFollowUps(prev => [followUp, ...prev]);
-    setNewFollowUp({
-      clientName: '',
-      type: 'call',
-      priority: 'medium',
-      scheduledDate: new Date(),
-      notes: ''
-    });
-    setShowNewFollowUp(false);
+  const addFollowUp = async () => {
+    try {
+      const client = clients.find(c => c.id === newFollowUp.clientId);
+      const payload = {
+        title: `${newFollowUp.type.toUpperCase()} follow-up ${client ? `with ${client.name}` : ''}`.trim(),
+        status: 'Pending',
+        description: newFollowUp.notes,
+        notes: newFollowUp.notes,
+        relatedTo: newFollowUp.clientId || null,
+        relatedType: newFollowUp.clientId ? 'Client' : null,
+        dueDate: newFollowUp.scheduledDate.toISOString(),
+        priority: newFollowUp.priority,
+      } as any;
+      const created = await taskService.create(payload);
+      setTasks(prev => [{
+        id: created.id,
+        title: created.title || 'Follow-up',
+        status: (created.status || 'Pending'),
+        description: created.description,
+        notes: created.notes,
+        relatedTo: created.relatedTo,
+        relatedType: created.relatedType,
+        assignedTo: created.assignedTo,
+        dueDate: created.dueDate,
+        priority: created.priority,
+      }, ...prev]);
+      setShowNewFollowUp(false);
+      setNewFollowUp({ clientId: '', type: 'call', priority: 'Medium', scheduledDate: new Date(), notes: '' });
+      toast({ title: 'Follow-up added' });
+    } catch (e:any) {
+      console.error(e);
+      toast({ title: 'Error', description: 'Failed to add follow-up', variant: 'destructive' });
+    }
   };
 
-  const updateFollowUpStatus = (id: string, status: 'pending' | 'completed' | 'overdue') => {
-    setFollowUps(prev => prev.map(fu => 
-      fu.id === id ? { ...fu, status } : fu
-    ));
+  const updateFollowUpStatus = async (id: string, status: FollowUpTask['status']) => {
+    try {
+      await taskService.update(id, { status });
+      setTasks(prev => prev.map(t => t.id === id ? { ...t, status } : t));
+    } catch (e:any) {
+      console.error(e);
+      toast({ title: 'Error', description: 'Failed to update status', variant: 'destructive' });
+    }
   };
 
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount);
-  };
-
-  const pendingCount = followUps.filter(fu => fu.status === 'pending').length;
-  const overdueCount = followUps.filter(fu => fu.status === 'overdue').length;
-  const completedCount = followUps.filter(fu => fu.status === 'completed').length;
+  if (loading) {
+    return (
+      <div className="container mx-auto p-4">Loading...</div>
+    );
+  }
 
   return (
     <div className="container mx-auto p-4 space-y-6">
@@ -205,53 +194,10 @@ export default function ClientFollowUp() {
 
       {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Clock className="h-5 w-5 text-blue-600" />
-              <div>
-                <p className="text-sm text-gray-600">Pending</p>
-                <p className="text-2xl font-bold text-blue-600">{pendingCount}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <AlertCircle className="h-5 w-5 text-red-600" />
-              <div>
-                <p className="text-sm text-gray-600">Overdue</p>
-                <p className="text-2xl font-bold text-red-600">{overdueCount}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <CheckCircle className="h-5 w-5 text-green-600" />
-              <div>
-                <p className="text-sm text-gray-600">Completed</p>
-                <p className="text-2xl font-bold text-green-600">{completedCount}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Users className="h-5 w-5 text-purple-600" />
-              <div>
-                <p className="text-sm text-gray-600">Total Clients</p>
-                <p className="text-2xl font-bold text-purple-600">{clients.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <Card><CardContent className="p-4"><div className="flex items-center space-x-2"><Clock className="h-5 w-5 text-blue-600" /><div><p className="text-sm text-gray-600">Pending</p><p className="text-2xl font-bold text-blue-600">{pendingCount}</p></div></div></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="flex items-center space-x-2"><AlertCircle className="h-5 w-5 text-red-600" /><div><p className="text-sm text-gray-600">Overdue</p><p className="text-2xl font-bold text-red-600">{overdueCount}</p></div></div></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="flex items-center space-x-2"><CheckCircle className="h-5 w-5 text-green-600" /><div><p className="text-sm text-gray-600">Completed</p><p className="text-2xl font-bold text-green-600">{completedCount}</p></div></div></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="flex items-center space-x-2"><Users className="h-5 w-5 text-purple-600" /><div><p className="text-sm text-gray-600">Total Clients</p><p className="text-2xl font-bold text-purple-600">{clients.length}</p></div></div></CardContent></Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -262,62 +208,46 @@ export default function ClientFollowUp() {
             <Button onClick={() => setShowNewFollowUp(true)}>Add Follow-up</Button>
           </div>
 
-          {followUps.map(followUp => (
-            <Card key={followUp.id}>
+          {tasks.map(task => (
+            <Card key={task.id}>
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
                   <div className="flex-1 space-y-2">
                     <div className="flex items-center space-x-2">
-                      <h3 className="font-medium">{followUp.clientName}</h3>
-                      <Badge variant="outline" className={priorities.find(p => p.value === followUp.priority)?.color}>
-                        {priorities.find(p => p.value === followUp.priority)?.label}
+                      <h3 className="font-medium">{task.title}</h3>
+                      <Badge variant="outline" className={cn('capitalize', priorities.find(p => p.value === (task.priority || 'Medium'))?.color)}>
+                        {task.priority || 'Medium'}
                       </Badge>
-                      <Badge variant="outline" className={statuses.find(s => s.value === followUp.status)?.color}>
-                        {statuses.find(s => s.value === followUp.status)?.label}
+                      <Badge variant="outline" className={cn(statuses.find(s => s.value === task.status)?.color)}>
+                        {task.status}
                       </Badge>
                     </div>
-                    
+
                     <div className="flex items-center space-x-4 text-sm text-gray-600">
                       <div className="flex items-center space-x-1">
-                        {getTypeIcon(followUp.type)}
-                        <span className="capitalize">{followUp.type}</span>
+                        {getTypeIcon('call')}
+                        <span className="capitalize">Due</span>
                       </div>
-                      <div className="flex items-center space-x-1">
-                        <CalendarIcon className="h-4 w-4" />
-                        <span>{format(followUp.scheduledDate, 'MMM dd, yyyy')}</span>
-                      </div>
+                      {task.dueDate && (
+                        <div className="flex items-center space-x-1">
+                          <CalendarIcon className="h-4 w-4" />
+                          <span>{format(new Date(task.dueDate), 'MMM dd, yyyy')}</span>
+                        </div>
+                      )}
                     </div>
-                    
-                    <p className="text-sm text-gray-700">{followUp.notes}</p>
+
+                    {task.notes && <p className="text-sm text-gray-700">{task.notes}</p>}
                   </div>
-                  
+
                   <div className="flex space-x-2">
-                    {followUp.status === 'pending' && (
+                    {task.status === 'Pending' && (
                       <>
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => updateFollowUpStatus(followUp.id, 'completed')}
-                        >
-                          Complete
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => updateFollowUpStatus(followUp.id, 'overdue')}
-                        >
-                          Mark Overdue
-                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => updateFollowUpStatus(task.id, 'Completed')}>Complete</Button>
+                        <Button size="sm" variant="outline" onClick={() => updateFollowUpStatus(task.id, 'Overdue')}>Mark Overdue</Button>
                       </>
                     )}
-                    {followUp.status === 'overdue' && (
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => updateFollowUpStatus(followUp.id, 'completed')}
-                      >
-                        Complete
-                      </Button>
+                    {task.status === 'Overdue' && (
+                      <Button size="sm" variant="outline" onClick={() => updateFollowUpStatus(task.id, 'Completed')}>Complete</Button>
                     )}
                   </div>
                 </div>
@@ -326,10 +256,9 @@ export default function ClientFollowUp() {
           ))}
         </div>
 
-        {/* Client Loyalty Overview */}
+        {/* Client List */}
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold">Client Loyalty Overview</h2>
-          
+          <h2 className="text-lg font-semibold">Clients</h2>
           {clients.map(client => (
             <Card key={client.id}>
               <CardContent className="p-4">
@@ -337,32 +266,14 @@ export default function ClientFollowUp() {
                   <div className="flex items-center justify-between">
                     <h3 className="font-medium">{client.name}</h3>
                     <Badge variant="outline" className="bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800">
-                      {client.tier}
+                      {client.loyaltyLevel || '—'}
                     </Badge>
                   </div>
-                  
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Points:</span>
-                      <span className="font-medium">{client.loyaltyPoints}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Total Spent:</span>
-                      <span className="font-medium">{formatCurrency(client.totalSpent)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Last Purchase:</span>
-                      <span className="font-medium">{format(client.lastPurchase, 'MMM dd')}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-1">
-                    <Star className="h-4 w-4 text-yellow-500 fill-current" />
-                    <span className="text-sm text-gray-600">
-                      {client.tier === 'Platinum' ? '★★★★★' : 
-                       client.tier === 'Gold' ? '★★★★☆' : 
-                       client.tier === 'Silver' ? '★★★☆☆' : '★★☆☆☆'}
-                    </span>
+                  <div className="space-y-1 text-sm text-gray-700">
+                    {client.phone && <div>📞 {client.phone}</div>}
+                    {client.email && <div>✉️ {client.email}</div>}
+                    {client.city && <div>📍 {client.city}</div>}
+                    {client.businessName && <div>🏢 {client.businessName}</div>}
                   </div>
                 </div>
               </CardContent>
@@ -380,19 +291,19 @@ export default function ClientFollowUp() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Client Name</Label>
-                <Select value={newFollowUp.clientName} onValueChange={(value) => setNewFollowUp(prev => ({ ...prev, clientName: value }))}>
+                <Label>Client</Label>
+                <Select value={newFollowUp.clientId} onValueChange={(value) => setNewFollowUp(prev => ({ ...prev, clientId: value }))}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select client" />
                   </SelectTrigger>
                   <SelectContent>
                     {clients.map(client => (
-                      <SelectItem key={client.id} value={client.name}>{client.name}</SelectItem>
+                      <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              
+
               <div className="space-y-2">
                 <Label>Follow-up Type</Label>
                 <Select value={newFollowUp.type} onValueChange={(value: any) => setNewFollowUp(prev => ({ ...prev, type: value }))}>
@@ -406,7 +317,7 @@ export default function ClientFollowUp() {
                   </SelectContent>
                 </Select>
               </div>
-              
+
               <div className="space-y-2">
                 <Label>Priority</Label>
                 <Select value={newFollowUp.priority} onValueChange={(value: any) => setNewFollowUp(prev => ({ ...prev, priority: value }))}>
@@ -420,7 +331,7 @@ export default function ClientFollowUp() {
                   </SelectContent>
                 </Select>
               </div>
-              
+
               <div className="space-y-2">
                 <Label>Scheduled Date</Label>
                 <Popover>
@@ -440,7 +351,7 @@ export default function ClientFollowUp() {
                   </PopoverContent>
                 </Popover>
               </div>
-              
+
               <div className="space-y-2">
                 <Label>Notes</Label>
                 <Textarea 
@@ -449,7 +360,7 @@ export default function ClientFollowUp() {
                   onChange={(e) => setNewFollowUp(prev => ({ ...prev, notes: e.target.value }))}
                 />
               </div>
-              
+
               <div className="flex space-x-2">
                 <Button onClick={addFollowUp} className="flex-1">Add Follow-up</Button>
                 <Button variant="outline" onClick={() => setShowNewFollowUp(false)}>Cancel</Button>

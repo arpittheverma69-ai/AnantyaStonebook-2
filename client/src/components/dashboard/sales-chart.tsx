@@ -6,7 +6,7 @@ import { BarChart3, TrendingUp, TrendingDown, Calendar } from "lucide-react";
 import { useState, useMemo } from "react";
 
 export default function SalesChart() {
-  const [timeRange, setTimeRange] = useState<'7days' | '30days' | '90days'>('7days');
+  const [timeRange, setTimeRange] = useState<'7days' | '30days' | '90days'>('30days');
   
   const { data: sales = [] } = useQuery<Sale[]>({
     queryKey: ["/api/sales"],
@@ -17,6 +17,14 @@ export default function SalesChart() {
   const chartData = useMemo(() => {
     const today = new Date();
     const daysToShow = timeRange === '7days' ? 7 : timeRange === '30days' ? 30 : 90;
+    
+    console.log('Sales Chart Debug:', {
+      today: today.toISOString(),
+      totalSales: sales.length,
+      salesDates: sales.map(s => ({ id: s.id, date: s.date, createdAt: s.createdAt })),
+      timeRange: timeRange,
+      daysToShow: daysToShow
+    });
     
     // Generate array of dates for the time range
     const dates = [];
@@ -30,15 +38,30 @@ export default function SalesChart() {
     return dates.map(date => {
       // Find sales for this specific date
       const daySales = sales.filter(sale => {
-        if (!sale.date) return false;
+        // Use created_at if date is not available (for backward compatibility)
+        const saleDateField = sale.date || sale.createdAt;
+        if (!saleDateField) return false;
         
-        const saleDate = new Date(sale.date);
+        const saleDate = new Date(saleDateField);
         
         // Compare dates by setting time to start of day
         const saleDay = new Date(saleDate.getFullYear(), saleDate.getMonth(), saleDate.getDate());
         const targetDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
         
-        return saleDay.getTime() === targetDay.getTime();
+        const matches = saleDay.getTime() === targetDay.getTime();
+        
+        // Debug log for each date comparison
+        if (matches) {
+          console.log('Found matching sale:', {
+            saleId: sale.id,
+            saleDateField,
+            saleDay: saleDay.toDateString(),
+            targetDay: targetDay.toDateString(),
+            amount: sale.totalAmount
+          });
+        }
+        
+        return matches;
       });
 
       // Calculate total amount for this day

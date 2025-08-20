@@ -52,10 +52,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [navigate]);
 
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { error: error.message };
-    setUser(data.user);
-    setIsAuthenticated(true);
+    console.log("🔐 Attempting to sign in with:", { email });
+    console.log("🔐 Supabase URL:", import.meta.env.VITE_SUPABASE_URL);
+    console.log("🔐 Supabase Key exists:", !!import.meta.env.VITE_SUPABASE_ANON_KEY);
+    
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      console.log("🔐 Sign in result:", { data, error });
+      
+      if (error) {
+        console.error("🔐 Sign in error:", error);
+        return { error: error.message };
+      }
+      
+      console.log("🔐 Sign in successful:", data.user);
+      setUser(data.user);
+      setIsAuthenticated(true);
+    } catch (err) {
+      console.error("🔐 Sign in exception:", err);
+      return { error: "An unexpected error occurred" };
+    }
   };
 
   const signUp = async (email: string, password: string) => {

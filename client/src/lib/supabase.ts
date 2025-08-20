@@ -3,6 +3,11 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://luaoeowqcvnbjcpascnk.supabase.co'
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx1YW9lb3dxY3ZuYmpjcGFzY25rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQzOTgxMTEsImV4cCI6MjA2OTk3NDExMX0.Gf8dsa6oxudXZ8AB2mpz_FVTFx2y8wyD6TF7dyAWBG8'
 
+console.log("🔧 Supabase Configuration:");
+console.log("🔧 URL:", supabaseUrl);
+console.log("🔧 Key exists:", !!supabaseAnonKey);
+console.log("🔧 Key length:", supabaseAnonKey?.length);
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // Database types based on your schema

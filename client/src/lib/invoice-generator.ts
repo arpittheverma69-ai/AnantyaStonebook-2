@@ -29,6 +29,14 @@ export interface InvoiceData {
   isTrustworthy?: boolean;
   // Optional disclosures to print (e.g., treatments)
   treatmentDisclosures?: string[];
+  // Invoice-specific fields
+  buyersOrderNumber?: string;
+  buyersOrderDate?: string;
+  dispatchDocNo?: string;
+  deliveryNoteDate?: string;
+  dispatchedThrough?: string;
+  destination?: string;
+  termsOfDelivery?: string;
 }
 
 export const generateInvoicePDF = (data: InvoiceData): jsPDF => {

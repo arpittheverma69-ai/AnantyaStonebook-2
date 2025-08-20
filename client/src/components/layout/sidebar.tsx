@@ -86,6 +86,7 @@ const navigationGroups: NavigationGroup[] = [
     items: [
       { name: 'Certifications', href: '/certifications', icon: Tag },
       { name: 'Docs & Compliance', href: '/docs-compliance', icon: FileText },
+      { name: 'CA & Legal Assistant', href: '/ca-legal-assistant', icon: Shield },
     ]
   },
   {
@@ -117,6 +118,14 @@ const navigationGroups: NavigationGroup[] = [
     items: [
       { name: 'Finance', href: '/finance', icon: TrendingUp },
       { name: 'Reporting & Analytics', href: '/reporting-analytics', icon: BarChart3 },
+    ]
+  },
+  {
+    title: "Settings",
+    icon: Settings,
+    defaultOpen: false,
+    items: [
+      { name: 'Company Settings', href: '/company-settings', icon: Settings },
     ]
   },
 ];

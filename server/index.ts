@@ -9,12 +9,40 @@ dotenv.config();
 
 const app = express();
 
-// Basic CORS only
-app.use(cors());
+// Configure CORS to allow Supabase connections
+app.use(cors({
+  origin: true, // Allow all origins in development
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'apikey', 'Authorization']
+}));
+
+// Remove any restrictive security headers that might block Supabase
+app.use((req, res, next) => {
+  // Remove any existing CSP headers that might be blocking requests
+  res.removeHeader('Content-Security-Policy');
+  res.removeHeader('X-Content-Security-Policy');
+  
+  // Allow Supabase connections
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, apikey');
+  
+  next();
+});
 
 // Body parsing with size limits for security
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: false, limit: '10mb' }));
+
+// Health check endpoint for deployment platforms
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
 
 app.use((req, res, next) => {
   const start = Date.now();

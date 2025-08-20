@@ -99,6 +99,23 @@ export const sales = pgTable("sales", {
   invoiceFile: text("invoice_file"), // File path/URL
   paymentStatus: text("payment_status").notNull().default("Unpaid"), // Paid, Partial, Unpaid
   notes: text("notes"),
+  // Enhanced fields for better business logic
+  waitingPeriod: integer("waiting_period").default(0), // Waiting period in days for unpaid sales
+  isTrustworthy: boolean("is_trustworthy").default(true), // Whether the client is trustworthy
+  anyDiscount: decimal("any_discount", { precision: 15, scale: 2 }).default("0"), // Discount amount applied
+  isOutOfState: boolean("is_out_of_state").default(false), // Whether the sale is out of state (affects GST)
+  cgst: decimal("cgst", { precision: 15, scale: 2 }).default("0"), // Central GST amount
+  sgst: decimal("sgst", { precision: 15, scale: 2 }).default("0"), // State GST amount
+  igst: decimal("igst", { precision: 15, scale: 2 }).default("0"), // Integrated GST amount
+  totalWithTax: decimal("total_with_tax", { precision: 15, scale: 2 }).default("0"), // Total amount including all taxes
+  // Invoice-specific fields
+  buyersOrderNumber: text("buyers_order_number"), // Buyer's order number
+  buyersOrderDate: text("buyers_order_date"), // Buyer's order date
+  dispatchDocNo: text("dispatch_doc_no"), // Dispatch document number
+  deliveryNoteDate: text("delivery_note_date"), // Delivery note date
+  dispatchedThrough: text("dispatched_through"), // How goods are dispatched
+  destination: text("destination"), // Delivery destination
+  termsOfDelivery: text("terms_of_delivery"), // Terms of delivery
   createdAt: timestamp("created_at").default(sql`now()`),
   updatedAt: timestamp("updated_at").default(sql`now()`),
 });

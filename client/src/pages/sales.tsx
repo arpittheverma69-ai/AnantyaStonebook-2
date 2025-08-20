@@ -37,6 +37,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { downloadInvoice, shareInvoice, printInvoice, type InvoiceData } from "@/lib/invoice-generator";
 import { saleService, clientService, inventoryService } from "@/lib/database";
+import { supabase } from "@/lib/supabase";
 
 interface SaleItem {
   stoneId: string;
@@ -75,9 +76,47 @@ interface EnhancedSale {
   sgst?: number;
   igst?: number;
   totalWithTax?: number;
+  // Invoice-specific fields
+  buyersOrderNumber?: string;
+  buyersOrderDate?: string;
+  dispatchDocNo?: string;
+  deliveryNoteDate?: string;
+  dispatchedThrough?: string;
+  destination?: string;
+  termsOfDelivery?: string;
 }
 
 const PAYMENT_STATUSES = ['Paid', 'Partial', 'Unpaid'];
+
+// Build disclosures based on inventory.treatments and disclose flags
+function collectTreatmentDisclosures(allInventory: any[], items?: SaleItem[]): string[] {
+  if (!items || items.length === 0) return [];
+  const disclosures: string[] = [];
+  for (const it of items) {
+    const inv: any | undefined = allInventory.find((s: any) =>
+      s.gemId === it.stoneId || s.id === it.stoneId || s.gem_id === it.stoneId
+    );
+    if (!inv) continue;
+    // Determine flags and treatments across possible shapes
+    const disclose = inv.disclose_treatments ?? inv.discloseTreatments ?? inv?.extended?.discloseTreatments;
+    let treatments: Record<string, any> | undefined = inv.treatments ?? inv?.extended?.treatments;
+    if (!treatments && inv.notes) {
+      try {
+        const parsed = typeof inv.notes === 'string' ? JSON.parse(inv.notes) : inv.notes;
+        treatments = parsed?.extended?.treatments || parsed?.treatments;
+      } catch {}
+    }
+    if (disclose && treatments) {
+      const active = Object.entries(treatments).filter(([, v]) => !!v).map(([k]) => k);
+      if (active.length > 0) {
+        const id = inv.gemId || inv.gem_id || inv.id || it.stoneId;
+        const name = inv.type || it.stoneName || 'Stone';
+        disclosures.push(`${name} (${id}): treatments - ${active.join(', ')}`);
+      }
+    }
+  }
+  return disclosures;
+}
 
 // Utility function for currency formatting
 const formatCurrency = (amount: number) => {
@@ -119,22 +158,6 @@ export default function Sales() {
   const [inventory, setInventory] = useState<Inventory[]>([]);
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  // Build disclosures based on inventory.extended.treatments
-  function collectTreatmentDisclosures(items?: SaleItem[]): string[] {
-    if (!items || items.length === 0) return [];
-    const disclosures: string[] = [];
-    for (const it of items) {
-      const inv = inventory.find((s: any) => s.gemId === it.stoneId || s.id === it.stoneId || (s as any).gem_id === it.stoneId);
-      const ext = (inv as any)?.extended;
-      if (ext?.discloseTreatments && ext?.treatments) {
-        const active = Object.entries(ext.treatments).filter(([,v])=>!!v).map(([k])=>k);
-        if (active.length > 0) {
-          disclosures.push(`${inv?.type || 'Stone'} (${inv?.gemId || inv?.id}): treatments - ${active.join(', ')}`);
-        }
-      }
-    }
-    return disclosures;
-  }
 
   // Load data from database
   useEffect(() => {
@@ -342,6 +365,215 @@ export default function Sales() {
     setIsFormOpen(true);
   };
 
+  const handleCreateSale = async (data: Omit<EnhancedSale, 'id'>) => {
+    try {
+      // Calculate totals
+      const totalAmount = data.items.reduce((sum, item) => sum + item.totalPrice, 0);
+      const profit = totalAmount * 0.2; // 20% profit margin for demo
+      
+      // Calculate taxes
+      const subtotal = totalAmount - (data.anyDiscount || 0);
+      const cgst = data.isOutOfState ? 0 : subtotal * 0.015;
+      const sgst = data.isOutOfState ? 0 : subtotal * 0.015;
+      const igst = data.isOutOfState ? subtotal * 0.03 : 0;
+      const totalWithTax = subtotal + cgst + sgst + igst;
+
+      const saleData = {
+        saleId: data.saleId || `SALE-${Date.now().toString().slice(-6)}`,
+        date: new Date(data.date).toISOString(),
+        clientId: data.clientId,
+        stoneId: data.items.length > 0 ? data.items[0].stoneId : '',
+        quantity: data.items.length > 0 ? data.items[0].quantity || 1 : 1,
+        totalAmount: totalAmount,
+        profit: profit,
+        paymentStatus: data.paymentStatus,
+        notes: data.notes,
+        waitingPeriod: data.waitingPeriod || 0,
+        isTrustworthy: data.isTrustworthy || false,
+        anyDiscount: data.anyDiscount || 0,
+        isOutOfState: data.isOutOfState || false,
+        cgst,
+        sgst,
+        igst,
+        totalWithTax
+      };
+
+      console.log('Creating sale with data:', saleData);
+      const newSale = await saleService.create(saleData);
+      
+      // Add sale items and reduce inventory quantities
+      if (data.items.length > 0) {
+        await saleService.replaceItems(newSale.id, data.items.map((it) => {
+          // Convert gem_id to UUID if needed
+          let stoneId = it.stoneId;
+          if (stoneId && !isUuid(stoneId)) {
+            const byId = inventory.find(s => s.id === stoneId);
+            const byGem = byId ? undefined : inventory.find(s => (s.gemId || (s as any).gem_id) === stoneId);
+            stoneId = (byId?.id || byGem?.id || stoneId);
+          }
+          return {
+            stoneId: stoneId,
+            quantity: it.quantity || 1,
+            carat: it.carat,
+            pricePerCarat: it.pricePerCarat,
+            totalPrice: (it.quantity || 1) * it.carat * it.pricePerCarat,
+          };
+        }));
+
+        // Reduce inventory quantities for each item sold
+        console.log('=== INVENTORY REDUCTION DEBUG ===');
+        console.log('Items to process:', data.items);
+        console.log('Available inventory:', inventory.map(inv => ({ id: inv.id, type: inv.type, carat: inv.carat, quantity: inv.quantity })));
+        
+        for (const item of data.items) {
+          console.log('Processing item:', item);
+          let stoneId = item.stoneId;
+          let inventoryItem = null;
+          
+          // Try to find the inventory item by different methods
+          console.log('Looking for stoneId:', stoneId, 'isUuid:', isUuid(stoneId));
+          
+          if (stoneId && !isUuid(stoneId)) {
+            console.log('StoneId is not UUID, trying different matching methods...');
+            // First try by UUID
+            inventoryItem = inventory.find(s => s.id === stoneId);
+            console.log('Tried by UUID, found:', inventoryItem?.type);
+            
+            // If not found, try by gem_id
+            if (!inventoryItem) {
+              inventoryItem = inventory.find(s => (s.gemId || (s as any).gem_id) === stoneId);
+              console.log('Tried by gem_id, found:', inventoryItem?.type);
+            }
+            
+            // If still not found, try by type and carat (fallback method)
+            if (!inventoryItem) {
+              console.log('Trying by type and carat match...');
+              inventoryItem = inventory.find(s => 
+                s.type === item.stoneName && 
+                Math.abs((s.carat || 0) - item.carat) < 0.1 // Allow small difference in carat
+              );
+              console.log('Tried by type+carat, found:', inventoryItem?.type);
+            }
+            
+            // Update stoneId to the actual inventory ID
+            if (inventoryItem) {
+              stoneId = inventoryItem.id;
+              console.log('Updated stoneId to:', stoneId);
+            }
+          } else if (stoneId) {
+            // Direct UUID lookup
+            console.log('StoneId is UUID, doing direct lookup...');
+            inventoryItem = inventory.find(inv => inv.id === stoneId);
+            console.log('Direct UUID lookup found:', inventoryItem?.type);
+          }
+
+          if (inventoryItem) {
+            const currentQuantity = inventoryItem.quantity || 0;
+            const soldQuantity = item.quantity || 1;
+            const newQuantity = Math.max(0, currentQuantity - soldQuantity);
+            
+            console.log(`Reducing inventory for ${inventoryItem.type} (${inventoryItem.id}): ${currentQuantity} → ${newQuantity} (sold ${soldQuantity})`);
+            
+            // Only update quantity and availability to avoid schema issues
+            // Use direct Supabase call to avoid toSnakeCaseInventory conversion
+            const { error } = await supabase
+              .from('inventory')
+              .update({ 
+                quantity: newQuantity,
+                is_available: newQuantity > 0,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', stoneId);
+            
+            if (error) {
+              console.error('Error updating inventory:', error);
+              throw error;
+            }
+          } else {
+            console.warn(`Could not find inventory item for stone: ${item.stoneName} (${item.stoneId})`);
+          }
+        }
+      }
+      
+      // Reload sales and inventory data
+      const [salesData, inventoryData] = await Promise.all([
+        saleService.getAll(),
+        inventoryService.getAll()
+      ]);
+      
+      // Update local inventory state
+      setInventory(inventoryData);
+      const transformedSales: EnhancedSale[] = salesData.map((sale: any) => ({
+        id: sale.id,
+        saleId: sale.sale_id,
+        date: sale.date,
+        clientId: sale.client_id,
+        clientName: sale.clients?.name || '',
+        firmName: sale.clients?.business_name || '',
+        gstNumber: sale.clients?.gst_number || '',
+        address: sale.clients?.address || '',
+        phoneNumber: sale.clients?.phone || '',
+        stoneId: sale.stone_id,
+        quantity: sale.quantity,
+        totalAmount: sale.total_amount,
+        profit: sale.profit,
+        paymentStatus: sale.payment_status,
+        notes: sale.notes,
+        createdAt: sale.created_at,
+        updatedAt: sale.updated_at,
+        // Use sale_items if available, otherwise fallback to single inventory item
+        items: (() => {
+          if (sale.sale_items && sale.sale_items.length > 0) {
+            return sale.sale_items.map((si: any) => ({
+              stoneId: si.inventory?.gem_id || si.stone_id,
+              stoneName: si.inventory?.type || '',
+              carat: parseFloat((si.carat ?? si.inventory?.carat) || '0'),
+              pricePerCarat: parseFloat((si.price_per_carat ?? si.inventory?.price_per_carat) || '0'),
+              totalPrice: parseFloat(si.total_price)
+            }));
+          } else {
+            return [{
+              stoneId: sale.inventory?.gem_id || sale.stone_id || '',
+              stoneName: sale.inventory?.type || '',
+              carat: parseFloat(sale.inventory?.carat || '0'),
+              pricePerCarat: parseFloat(sale.inventory?.price_per_carat || '0'),
+              totalPrice: sale.total_amount
+            }];
+          }
+        })(),
+        isTrustworthy: sale.is_trustworthy || true,
+        anyDiscount: sale.any_discount || 0,
+        isOutOfState: sale.is_out_of_state || false,
+        cgst: sale.cgst || 0,
+        sgst: sale.sgst || 0,
+        igst: sale.igst || 0,
+        totalWithTax: sale.total_with_tax || sale.total_amount
+      }));
+
+      setSales(transformedSales);
+      setIsFormOpen(false);
+      setEditingSale(null);
+      
+      // Create a summary of what was sold
+      const soldItems = data.items.map(item => {
+        const inventoryItem = inventory.find(inv => inv.id === item.stoneId);
+        return `${item.quantity}x ${inventoryItem?.type || 'Unknown'} (${inventoryItem?.gemId || item.stoneId})`;
+      }).join(', ');
+      
+      toast({
+        title: "Sale Created Successfully",
+        description: `Sold: ${soldItems}. Inventory quantities have been updated.`,
+      });
+    } catch (error) {
+      console.error('Error creating sale:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create sale. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleUpdateSale = async (data: Omit<EnhancedSale, 'id'>) => {
     if (!editingSale) return;
     
@@ -366,9 +598,74 @@ export default function Sales() {
       }
 
       console.log('Updating sale with data:', saleData);
+      
+      // Get the original sale items to calculate inventory adjustments
+      const originalItems = editingSale.items || [];
+      const newItems = data.items || [];
+      
+      // First, restore inventory quantities from the original sale
+      for (const originalItem of originalItems) {
+        let stoneId = originalItem.stoneId;
+        let inventoryItem = null;
+        
+        // Try to find the inventory item by different methods
+        if (stoneId && !isUuid(stoneId)) {
+          // First try by UUID
+          inventoryItem = inventory.find(s => s.id === stoneId);
+          
+          // If not found, try by gem_id
+          if (!inventoryItem) {
+            inventoryItem = inventory.find(s => (s.gemId || (s as any).gem_id) === stoneId);
+          }
+          
+          // If still not found, try by type and carat (fallback method)
+          if (!inventoryItem) {
+            inventoryItem = inventory.find(s => 
+              s.type === originalItem.stoneName && 
+              Math.abs((s.carat || 0) - originalItem.carat) < 0.1 // Allow small difference in carat
+            );
+          }
+          
+          // Update stoneId to the actual inventory ID
+          if (inventoryItem) {
+            stoneId = inventoryItem.id;
+          }
+        } else if (stoneId) {
+          // Direct UUID lookup
+          inventoryItem = inventory.find(inv => inv.id === stoneId);
+        }
+
+        if (inventoryItem) {
+          const currentQuantity = inventoryItem.quantity || 0;
+          const restoredQuantity = originalItem.quantity || 1;
+          const newQuantity = currentQuantity + restoredQuantity;
+          
+          console.log(`Restoring inventory for ${inventoryItem.type} (${inventoryItem.id}): ${currentQuantity} → ${newQuantity} (restored ${restoredQuantity})`);
+          
+          // Only update quantity and availability to avoid schema issues
+          // Use direct Supabase call to avoid toSnakeCaseInventory conversion
+          const { error } = await supabase
+            .from('inventory')
+            .update({ 
+              quantity: newQuantity,
+              is_available: newQuantity > 0,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', stoneId);
+          
+          if (error) {
+            console.error('Error updating inventory:', error);
+            throw error;
+          }
+        } else {
+          console.warn(`Could not find inventory item for stone: ${originalItem.stoneName} (${originalItem.stoneId})`);
+        }
+      }
+      
       await saleService.update(editingSale.id, saleData);
+      
       // Replace multi-items for this sale
-      await saleService.replaceItems(editingSale.id, (data.items || []).map((it) => {
+      await saleService.replaceItems(editingSale.id, newItems.map((it) => {
         // Convert gem_id to UUID if needed
         let stoneId = it.stoneId;
         if (stoneId && !isUuid(stoneId)) {
@@ -385,8 +682,73 @@ export default function Sales() {
         };
       }));
       
-      // Reload sales data
-      const salesData = await saleService.getAll();
+      // Now reduce inventory quantities for the new sale items
+      for (const item of newItems) {
+        let stoneId = item.stoneId;
+        let inventoryItem = null;
+        
+        // Try to find the inventory item by different methods
+        if (stoneId && !isUuid(stoneId)) {
+          // First try by UUID
+          inventoryItem = inventory.find(s => s.id === stoneId);
+          
+          // If not found, try by gem_id
+          if (!inventoryItem) {
+            inventoryItem = inventory.find(s => (s.gemId || (s as any).gem_id) === stoneId);
+          }
+          
+          // If still not found, try by type and carat (fallback method)
+          if (!inventoryItem) {
+            inventoryItem = inventory.find(s => 
+              s.type === item.stoneName && 
+              Math.abs((s.carat || 0) - item.carat) < 0.1 // Allow small difference in carat
+            );
+          }
+          
+          // Update stoneId to the actual inventory ID
+          if (inventoryItem) {
+            stoneId = inventoryItem.id;
+          }
+        } else if (stoneId) {
+          // Direct UUID lookup
+          inventoryItem = inventory.find(inv => inv.id === stoneId);
+        }
+
+        if (inventoryItem) {
+          const currentQuantity = inventoryItem.quantity || 0;
+          const soldQuantity = item.quantity || 1;
+          const newQuantity = Math.max(0, currentQuantity - soldQuantity);
+          
+          console.log(`Reducing inventory for ${inventoryItem.type} (${inventoryItem.id}): ${currentQuantity} → ${newQuantity} (sold ${soldQuantity})`);
+          
+          // Only update quantity and availability to avoid schema issues
+          // Use direct Supabase call to avoid toSnakeCaseInventory conversion
+          const { error } = await supabase
+            .from('inventory')
+            .update({ 
+              quantity: newQuantity,
+              is_available: newQuantity > 0,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', stoneId);
+          
+          if (error) {
+            console.error('Error updating inventory:', error);
+            throw error;
+          }
+        } else {
+          console.warn(`Could not find inventory item for stone: ${item.stoneName} (${item.stoneId})`);
+        }
+      }
+      
+      // Reload sales and inventory data
+      const [salesData, inventoryData] = await Promise.all([
+        saleService.getAll(),
+        inventoryService.getAll()
+      ]);
+      
+      // Update local inventory state
+      setInventory(inventoryData);
       const transformedSales: EnhancedSale[] = salesData.map((sale: any) => ({
         id: sale.id,
         saleId: sale.sale_id,
@@ -454,12 +816,81 @@ export default function Sales() {
   const handleDelete = async (id: string) => {
     if (confirm("Are you sure you want to delete this sale?")) {
       try {
+        // Get the sale details before deleting to restore inventory
+        const saleToDelete = sales.find(sale => sale.id === id);
+        
+        if (saleToDelete && saleToDelete.items) {
+          // Restore inventory quantities for each item in the sale
+          for (const item of saleToDelete.items) {
+            let stoneId = item.stoneId;
+            let inventoryItem = null;
+            
+            // Try to find the inventory item by different methods
+            if (stoneId && !isUuid(stoneId)) {
+              // First try by UUID
+              inventoryItem = inventory.find(s => s.id === stoneId);
+              
+              // If not found, try by gem_id
+              if (!inventoryItem) {
+                inventoryItem = inventory.find(s => (s.gemId || (s as any).gem_id) === stoneId);
+              }
+              
+              // If still not found, try by type and carat (fallback method)
+              if (!inventoryItem) {
+                inventoryItem = inventory.find(s => 
+                  s.type === item.stoneName && 
+                  Math.abs((s.carat || 0) - item.carat) < 0.1 // Allow small difference in carat
+                );
+              }
+              
+              // Update stoneId to the actual inventory ID
+              if (inventoryItem) {
+                stoneId = inventoryItem.id;
+              }
+            } else if (stoneId) {
+              // Direct UUID lookup
+              inventoryItem = inventory.find(inv => inv.id === stoneId);
+            }
+
+            if (inventoryItem) {
+              const currentQuantity = inventoryItem.quantity || 0;
+              const restoredQuantity = item.quantity || 1;
+              const newQuantity = currentQuantity + restoredQuantity;
+              
+              console.log(`Restoring inventory for ${inventoryItem.type} (${inventoryItem.id}): ${currentQuantity} → ${newQuantity} (restored ${restoredQuantity})`);
+              
+              // Only update quantity and availability to avoid schema issues
+              // Use direct Supabase call to avoid toSnakeCaseInventory conversion
+              const { error } = await supabase
+                .from('inventory')
+                .update({ 
+                  quantity: newQuantity,
+                  is_available: newQuantity > 0,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', stoneId);
+              
+              if (error) {
+                console.error('Error updating inventory:', error);
+                throw error;
+              }
+            } else {
+              console.warn(`Could not find inventory item for stone: ${item.stoneName} (${item.stoneId})`);
+            }
+          }
+        }
+        
         await saleService.delete(id);
-      setSales(sales.filter(sale => sale.id !== id));
-      toast({
-        title: "Success",
-        description: "Sale deleted successfully",
-      });
+        setSales(sales.filter(sale => sale.id !== id));
+        
+        // Reload inventory data
+        const inventoryData = await inventoryService.getAll();
+        setInventory(inventoryData);
+        
+        toast({
+          title: "Success",
+          description: "Sale deleted successfully and inventory restored",
+        });
       } catch (error) {
         console.error('Error deleting sale:', error);
         toast({
@@ -487,167 +918,190 @@ export default function Sales() {
 
 
   if (selectedSale) {
-    return <SaleDetailView sale={selectedSale} onBack={handleBackToList} />;
+    return <SaleDetailView sale={selectedSale} onBack={handleBackToList} inventory={inventory} />;
   }
 
   return (
-    <div className="space-y-4 md:space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Sales Management</h1>
-          <p className="text-muted-foreground text-sm md:text-base">Track your sales, generate invoices, and manage payments</p>
+    <>
+      <div className="space-y-4 md:space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-foreground">Sales Management</h1>
+            <p className="text-muted-foreground text-sm md:text-base">Track your sales, generate invoices, and manage payments</p>
+          </div>
+          <Button onClick={() => setIsFormOpen(true)} className="btn-modern bg-gradient-to-r from-primary to-purple-600 w-full sm:w-auto">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Sale
+          </Button>
         </div>
-        <Button onClick={() => setIsFormOpen(true)} className="btn-modern bg-gradient-to-r from-primary to-purple-600 w-full sm:w-auto">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Sale
-        </Button>
+
+        {/* Filters and Search */}
+        <Card className="card-shadow-lg bg-gradient-to-br from-background to-muted/20 border-0">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-xl font-semibold">Sales Transactions</CardTitle>
+              <div className="flex items-center space-x-4">
+                <Select value={selectedPaymentStatus} onValueChange={setSelectedPaymentStatus}>
+                  <SelectTrigger className="w-40 input-modern">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    {PAYMENT_STATUSES.map(status => (
+                      <SelectItem key={status} value={status}>{status}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {/* Search */}
+            <div className="flex items-center space-x-4 mb-6">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Input
+                  placeholder="Search by Sale ID, client name, firm name..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 input-modern"
+                />
+              </div>
+            </div>
+
+            {/* Results Count */}
+            <div className="mb-4">
+              <p className="text-muted-foreground">
+                Showing {filteredSales.length} of {sales.length} sales
+              </p>
+            </div>
+
+            {/* Content */}
+            {filteredSales.length === 0 ? (
+              <div className="text-center py-12">
+                <ShoppingCart className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-xl font-medium text-foreground mb-2">No sales found</h3>
+                <p className="text-muted-foreground mb-4">
+                  {searchQuery ? "No sales match your search criteria" : "Get started by recording your first sale"}
+                </p>
+                {!searchQuery && (
+                  <Button onClick={() => setIsFormOpen(true)} className="btn-modern">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Record Your First Sale
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table className="table-modern">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Sale ID</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Client Name</TableHead>
+                      <TableHead>Firm/Company</TableHead>
+                      <TableHead>Items</TableHead>
+                      <TableHead>Total Amount</TableHead>
+                      <TableHead>Payment Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredSales.map((sale) => (
+                      <TableRow 
+                        key={sale.id} 
+                        className="cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => handleSaleClick(sale)}
+                      >
+                        <TableCell className="font-medium">{sale.saleId}</TableCell>
+                        <TableCell>{formatDate(sale.date)}</TableCell>
+                        <TableCell>{sale.clientName}</TableCell>
+                        <TableCell>{sale.firmName || '-'}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {sale.items?.map((item, index) => (
+                              <Badge key={index} variant="outline" className="text-xs">
+                                {item.stoneName} ({item.carat}ct)
+                              </Badge>
+                            )) || '-'}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-semibold">
+                          {formatCurrency(parseFloat(sale.totalAmount))}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={getPaymentStatusColor(sale.paymentStatus)}>
+                            {sale.paymentStatus}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEdit(sale);
+                              }}
+                              className="btn-modern"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(sale.id);
+                              }}
+                              className="btn-modern text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Filters and Search */}
-      <Card className="card-shadow-lg bg-gradient-to-br from-background to-muted/20 border-0">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-xl font-semibold">Sales Transactions</CardTitle>
-            <div className="flex items-center space-x-4">
-              <Select value={selectedPaymentStatus} onValueChange={setSelectedPaymentStatus}>
-                <SelectTrigger className="w-40 input-modern">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  {PAYMENT_STATUSES.map(status => (
-                    <SelectItem key={status} value={status}>{status}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {/* Search */}
-          <div className="flex items-center space-x-4 mb-6">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-              <Input
-                placeholder="Search by Sale ID, client name, firm name..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 input-modern"
-              />
-            </div>
-          </div>
-
-          {/* Results Count */}
-          <div className="mb-4">
-            <p className="text-muted-foreground">
-              Showing {filteredSales.length} of {sales.length} sales
-            </p>
-          </div>
-
-          {/* Content */}
-          {filteredSales.length === 0 ? (
-            <div className="text-center py-12">
-              <ShoppingCart className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-xl font-medium text-foreground mb-2">No sales found</h3>
-              <p className="text-muted-foreground mb-4">
-                {searchQuery ? "No sales match your search criteria" : "Get started by recording your first sale"}
-              </p>
-              {!searchQuery && (
-                <Button onClick={() => setIsFormOpen(true)} className="btn-modern">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Record Your First Sale
-                </Button>
-              )}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table className="table-modern">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Sale ID</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Client Name</TableHead>
-                    <TableHead>Firm/Company</TableHead>
-                    <TableHead>Items</TableHead>
-                    <TableHead>Total Amount</TableHead>
-                    <TableHead>Payment Status</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredSales.map((sale) => (
-                    <TableRow 
-                      key={sale.id} 
-                      className="cursor-pointer hover:bg-muted/50 transition-colors"
-                      onClick={() => handleSaleClick(sale)}
-                    >
-                      <TableCell className="font-medium">{sale.saleId}</TableCell>
-                      <TableCell>{formatDate(sale.date)}</TableCell>
-                      <TableCell>{sale.clientName}</TableCell>
-                      <TableCell>{sale.firmName || '-'}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {sale.items?.map((item, index) => (
-                            <Badge key={index} variant="outline" className="text-xs">
-                              {item.stoneName} ({item.carat}ct)
-                            </Badge>
-                          )) || '-'}
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-semibold">
-                        {formatCurrency(parseFloat(sale.totalAmount))}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={getPaymentStatusColor(sale.paymentStatus)}>
-                          {sale.paymentStatus}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEdit(sale);
-                            }}
-                            className="btn-modern"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDelete(sale.id);
-                            }}
-                            className="btn-modern text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+      {/* Add/Edit Sale Dialog */}
+      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingSale ? 'Edit Sale' : 'Add New Sale'}</DialogTitle>
+          </DialogHeader>
+          <SaleForm
+            sale={editingSale}
+            inventory={inventory}
+            clients={clients}
+            onSubmit={editingSale ? handleUpdateSale : handleCreateSale}
+            onClose={() => {
+              setIsFormOpen(false);
+              setEditingSale(null);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
 // Sale Detail View Component
 function SaleDetailView({ 
   sale, 
-  onBack 
+  onBack,
+  inventory,
 }: { 
   sale: EnhancedSale; 
   onBack: () => void; 
+  inventory: Inventory[];
 }) {
   const { toast } = useToast();
   const formatCurrency = (amount: number) => {
@@ -685,7 +1139,8 @@ function SaleDetailView({
           <Button 
             className="btn-modern"
             onClick={() => {
-              const invoiceData: InvoiceData = {
+              const companyInfo = (() => { try { return JSON.parse(localStorage.getItem('company-info') || '{}'); } catch { return {}; } })();
+              const payload = {
                 invoiceNumber: sale.saleId,
                 date: formatDate(sale.date),
                 clientName: sale.clientName || '',
@@ -693,74 +1148,76 @@ function SaleDetailView({
                 gstNumber: sale.gstNumber,
                 address: sale.address,
                 phoneNumber: sale.phoneNumber,
-                items: sale.items || [],
+                items: (sale.items || []).map((it) => ({
+                  stoneId: it.stoneId,
+                  stoneName: it.stoneName,
+                  carat: it.carat,
+                  pricePerCarat: it.pricePerCarat,
+                  totalPrice: it.totalPrice,
+                  quantity: it.quantity || 1,
+                  hsn: '7113',
+                  unit: 'ct',
+                })),
                 subtotal: parseFloat(sale.totalAmount),
-                discount: sale.anyDiscount,
-                cgst: sale.cgst,
-                sgst: sale.sgst,
-                igst: sale.igst,
-                totalAmount: sale.totalWithTax || parseFloat(sale.totalAmount),
+                discount: sale.anyDiscount || 0,
+                cgst,
+                sgst,
+                igst,
+                totalAmount: totalWithTax,
                 isOutOfState: sale.isOutOfState || false,
                 paymentStatus: sale.paymentStatus,
                 waitingPeriod: sale.waitingPeriod,
                 isTrustworthy: sale.isTrustworthy,
-                treatmentDisclosures: collectTreatmentDisclosures(sale.items)
+                treatmentDisclosures: [],
+                // Company overrides
+                companyName: companyInfo.companyName,
+                companyTagline: companyInfo.companyTagline,
+                companyAddressLines: companyInfo.companyAddressLines,
+                companyPhone: companyInfo.companyPhone,
+                companyEmail: companyInfo.companyEmail,
+                companyGstin: companyInfo.companyGstin,
+                companyStateName: companyInfo.companyStateName,
+                companyStateCode: companyInfo.companyStateCode,
+                companyTin: companyInfo.companyTin,
+                companyPan: companyInfo.companyPan,
+                buyerStateName: companyInfo.buyerStateName,
+                buyerStateCode: companyInfo.buyerStateCode,
+                buyerTin: companyInfo.buyerTin,
+                bankName: companyInfo.bankName,
+                bankAccount: companyInfo.bankAccount,
+                bankIfsc: companyInfo.bankIfsc,
+                bankBranch: companyInfo.bankBranch,
+                deliveryNote: companyInfo.deliveryNote,
+                paymentTerms: companyInfo.paymentTerms,
+                referenceNumber: companyInfo.referenceNumber,
+                referenceDate: companyInfo.referenceDate,
+                otherReferences: companyInfo.otherReferences,
+                buyersOrderNumber: companyInfo.buyersOrderNumber,
+                buyersOrderDate: companyInfo.buyersOrderDate,
+                dispatchDocNo: companyInfo.dispatchDocNo,
+                deliveryNoteDate: companyInfo.deliveryNoteDate,
+                dispatchedThrough: companyInfo.dispatchedThrough,
+                destination: companyInfo.destination,
+                termsOfDelivery: companyInfo.termsOfDelivery,
               };
-              downloadInvoice(invoiceData);
-              toast({
-                title: "Invoice Downloaded",
-                description: "Invoice has been downloaded to your device.",
-              });
+              const query = encodeURIComponent(JSON.stringify(payload));
+              const url = `/invoice/print?data=${query}`;
+              const a = document.createElement('a');
+              a.href = url;
+              a.target = '_blank';
+              a.rel = 'noopener';
+              a.click();
+              toast({ title: 'HTML Invoice Opened', description: 'Use the Print button to save as PDF or print.' });
             }}
           >
             <Download className="h-4 w-4 mr-2" />
-            Download Invoice
-          </Button>
-          <Button 
-            className="btn-modern"
-            onClick={async () => {
-              const invoiceData: InvoiceData = {
-                invoiceNumber: sale.saleId,
-                date: formatDate(sale.date),
-                clientName: sale.clientName || '',
-                firmName: sale.firmName,
-                gstNumber: sale.gstNumber,
-                address: sale.address,
-                phoneNumber: sale.phoneNumber,
-                items: sale.items || [],
-                subtotal: parseFloat(sale.totalAmount),
-                discount: sale.anyDiscount,
-                cgst: sale.cgst,
-                sgst: sale.sgst,
-                igst: sale.igst,
-                totalAmount: sale.totalWithTax || parseFloat(sale.totalAmount),
-                isOutOfState: sale.isOutOfState || false,
-                paymentStatus: sale.paymentStatus,
-                waitingPeriod: sale.waitingPeriod,
-                isTrustworthy: sale.isTrustworthy,
-                treatmentDisclosures: collectTreatmentDisclosures(sale.items)
-              };
-              const result = await shareInvoice(invoiceData);
-              if (result === 'shared') {
-                toast({
-                  title: "Invoice Shared",
-                  description: "Invoice has been shared successfully.",
-                });
-              } else if (result === 'downloaded') {
-                toast({
-                  title: "Invoice Downloaded",
-                  description: "Invoice has been downloaded to your device.",
-                });
-              }
-            }}
-          >
-            <Share2 className="h-4 w-4 mr-2" />
-            Share
+            Download (HTML A4)
           </Button>
           <Button 
             className="btn-modern"
             onClick={() => {
-              const invoiceData: InvoiceData = {
+              const companyInfo = (() => { try { return JSON.parse(localStorage.getItem('company-info') || '{}'); } catch { return {}; } })();
+              const payload = {
                 invoiceNumber: sale.saleId,
                 date: formatDate(sale.date),
                 clientName: sale.clientName || '',
@@ -768,28 +1225,142 @@ function SaleDetailView({
                 gstNumber: sale.gstNumber,
                 address: sale.address,
                 phoneNumber: sale.phoneNumber,
-                items: sale.items || [],
+                items: (sale.items || []).map((it) => ({
+                  stoneId: it.stoneId,
+                  stoneName: it.stoneName,
+                  carat: it.carat,
+                  pricePerCarat: it.pricePerCarat,
+                  totalPrice: it.totalPrice,
+                  quantity: it.quantity || 1,
+                  hsn: '7113',
+                  unit: 'ct',
+                })),
                 subtotal: parseFloat(sale.totalAmount),
-                discount: sale.anyDiscount,
-                cgst: sale.cgst,
-                sgst: sale.sgst,
-                igst: sale.igst,
-                totalAmount: sale.totalWithTax || parseFloat(sale.totalAmount),
+                discount: sale.anyDiscount || 0,
+                cgst,
+                sgst,
+                igst,
+                totalAmount: totalWithTax,
                 isOutOfState: sale.isOutOfState || false,
                 paymentStatus: sale.paymentStatus,
                 waitingPeriod: sale.waitingPeriod,
                 isTrustworthy: sale.isTrustworthy,
-                treatmentDisclosures: collectTreatmentDisclosures(sale.items)
+                treatmentDisclosures: [],
+                // Company overrides
+                companyName: companyInfo.companyName,
+                companyTagline: companyInfo.companyTagline,
+                companyAddressLines: companyInfo.companyAddressLines,
+                companyPhone: companyInfo.companyPhone,
+                companyEmail: companyInfo.companyEmail,
+                companyGstin: companyInfo.companyGstin,
+                companyStateName: companyInfo.companyStateName,
+                companyStateCode: companyInfo.companyStateCode,
+                companyTin: companyInfo.companyTin,
+                companyPan: companyInfo.companyPan,
+                buyerStateName: companyInfo.buyerStateName,
+                buyerStateCode: companyInfo.buyerStateCode,
+                buyerTin: companyInfo.buyerTin,
+                bankName: companyInfo.bankName,
+                bankAccount: companyInfo.bankAccount,
+                bankIfsc: companyInfo.bankIfsc,
+                bankBranch: companyInfo.bankBranch,
+                deliveryNote: companyInfo.deliveryNote,
+                paymentTerms: companyInfo.paymentTerms,
+                referenceNumber: companyInfo.referenceNumber,
+                referenceDate: companyInfo.referenceDate,
+                otherReferences: companyInfo.otherReferences,
+                buyersOrderNumber: companyInfo.buyersOrderNumber,
+                buyersOrderDate: companyInfo.buyersOrderDate,
+                dispatchDocNo: companyInfo.dispatchDocNo,
+                deliveryNoteDate: companyInfo.deliveryNoteDate,
+                dispatchedThrough: companyInfo.dispatchedThrough,
+                destination: companyInfo.destination,
+                termsOfDelivery: companyInfo.termsOfDelivery,
               };
-              printInvoice(invoiceData);
-              toast({
-                title: "Invoice Printed",
-                description: "Invoice has been sent to the printer.",
-              });
+              const query = encodeURIComponent(JSON.stringify(payload));
+              if (navigator.share) {
+                navigator.share({ title: `Invoice ${sale.saleId}`, url: `${window.location.origin}/invoice/print?data=${query}` }).catch(()=>{});
+              } else {
+                window.open(`/invoice/print?data=${query}`, '_blank');
+              }
+            }}
+          >
+            <Share2 className="h-4 w-4 mr-2" />
+            Share (HTML A4)
+          </Button>
+          <Button 
+            className="btn-modern"
+            onClick={() => {
+              const companyInfo = (() => { try { return JSON.parse(localStorage.getItem('company-info') || '{}'); } catch { return {}; } })();
+              const payload = {
+                invoiceNumber: sale.saleId,
+                date: formatDate(sale.date),
+                clientName: sale.clientName || '',
+                firmName: sale.firmName,
+                gstNumber: sale.gstNumber,
+                address: sale.address,
+                phoneNumber: sale.phoneNumber,
+                items: (sale.items || []).map((it) => ({
+                  stoneId: it.stoneId,
+                  stoneName: it.stoneName,
+                  carat: it.carat,
+                  pricePerCarat: it.pricePerCarat,
+                  totalPrice: it.totalPrice,
+                  quantity: it.quantity || 1,
+                  hsn: '7113',
+                  unit: 'ct',
+                })),
+                subtotal: parseFloat(sale.totalAmount),
+                discount: sale.anyDiscount || 0,
+                cgst,
+                sgst,
+                igst,
+                totalAmount: totalWithTax,
+                isOutOfState: sale.isOutOfState || false,
+                paymentStatus: sale.paymentStatus,
+                waitingPeriod: sale.waitingPeriod,
+                isTrustworthy: sale.isTrustworthy,
+                treatmentDisclosures: [],
+                // Company overrides
+                companyName: companyInfo.companyName,
+                companyTagline: companyInfo.companyTagline,
+                companyAddressLines: companyInfo.companyAddressLines,
+                companyPhone: companyInfo.companyPhone,
+                companyEmail: companyInfo.companyEmail,
+                companyGstin: companyInfo.companyGstin,
+                companyStateName: companyInfo.companyStateName,
+                companyStateCode: companyInfo.companyStateCode,
+                companyTin: companyInfo.companyTin,
+                companyPan: companyInfo.companyPan,
+                buyerStateName: companyInfo.buyerStateName,
+                buyerStateCode: companyInfo.buyerStateCode,
+                buyerTin: companyInfo.buyerTin,
+                bankName: companyInfo.bankName,
+                bankAccount: companyInfo.bankAccount,
+                bankIfsc: companyInfo.bankIfsc,
+                bankBranch: companyInfo.bankBranch,
+                deliveryNote: companyInfo.deliveryNote,
+                paymentTerms: companyInfo.paymentTerms,
+                referenceNumber: companyInfo.referenceNumber,
+                referenceDate: companyInfo.referenceDate,
+                otherReferences: companyInfo.otherReferences,
+                buyersOrderNumber: companyInfo.buyersOrderNumber,
+                buyersOrderDate: companyInfo.buyersOrderDate,
+                dispatchDocNo: companyInfo.dispatchDocNo,
+                deliveryNoteDate: companyInfo.deliveryNoteDate,
+                dispatchedThrough: companyInfo.dispatchedThrough,
+                destination: companyInfo.destination,
+                termsOfDelivery: companyInfo.termsOfDelivery,
+              };
+              const query = encodeURIComponent(JSON.stringify(payload));
+              const w = window.open(`/invoice/print?data=${query}`, '_blank');
+              if (w) {
+                const t = setInterval(() => { if (w.document && w.document.readyState === 'complete') { w.print(); clearInterval(t); } }, 300);
+              }
             }}
           >
             <Printer className="h-4 w-4 mr-2" />
-            Print
+            Print (HTML A4)
           </Button>
         </div>
       </div>
@@ -1054,7 +1625,15 @@ function SaleForm({
     isTrustworthy: sale?.isTrustworthy ?? true,
     anyDiscount: sale?.anyDiscount || 0,
     isOutOfState: sale?.isOutOfState ?? false,
-    notes: sale?.notes || ''
+    notes: sale?.notes || '',
+    // Invoice-specific fields
+    buyersOrderNumber: sale?.buyersOrderNumber || '',
+    buyersOrderDate: sale?.buyersOrderDate || '',
+    dispatchDocNo: sale?.dispatchDocNo || '',
+    deliveryNoteDate: sale?.deliveryNoteDate || '',
+    dispatchedThrough: sale?.dispatchedThrough || '',
+    destination: sale?.destination || '',
+    termsOfDelivery: sale?.termsOfDelivery || ''
   });
 
   const [newItem, setNewItem] = useState({
@@ -1112,6 +1691,24 @@ function SaleForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Validate inventory quantities
+    for (const item of formData.items) {
+      const inventoryItem = inventory.find(inv => inv.id === item.stoneId);
+      if (inventoryItem) {
+        const availableQuantity = inventoryItem.quantity || 0;
+        const requestedQuantity = item.quantity || 1;
+        
+        if (requestedQuantity > availableQuantity) {
+          toast({
+            title: "Insufficient Inventory",
+            description: `${inventoryItem.type} (${inventoryItem.gemId}) only has ${availableQuantity} available, but you're trying to sell ${requestedQuantity}`,
+            variant: "destructive"
+          });
+          return;
+        }
+      }
+    }
+    
     // Calculate totals
     const totalAmount = formData.items.reduce((sum, item) => sum + item.totalPrice, 0);
     const profit = totalAmount * 0.2; // 20% profit margin for demo
@@ -1142,7 +1739,15 @@ function SaleForm({
       igst,
       totalWithTax,
       saleId: `SALE-${Date.now().toString().slice(-6)}`,
-      paymentStatus: formData.paymentStatus
+      paymentStatus: formData.paymentStatus,
+      // Include invoice fields
+      buyersOrderNumber: formData.buyersOrderNumber,
+      buyersOrderDate: formData.buyersOrderDate,
+      dispatchDocNo: formData.dispatchDocNo,
+      deliveryNoteDate: formData.deliveryNoteDate,
+      dispatchedThrough: formData.dispatchedThrough,
+      destination: formData.destination,
+      termsOfDelivery: formData.termsOfDelivery
     });
   };
 
@@ -1171,19 +1776,121 @@ function SaleForm({
     });
   };
 
-  const handleClientChange = (clientId: string) => {
+  const handleClientChange = async (clientId: string) => {
+    console.log('🔍 handleClientChange called with clientId:', clientId);
     const client = clients.find(c => c.id === clientId);
     if (client) {
-      setFormData({
+      console.log('📋 Found client:', client.name);
+      
+      // Get company profile for defaults
+      const companyProfile = companyProfileService.get();
+      console.log('🏢 Company profile:', companyProfile);
+      
+      // Set basic defaults first (immediate)
+      const currentYear = new Date().getFullYear();
+      const basicDefaults = {
+        buyersOrderNumber: `PO-${currentYear}-001`,
+        buyersOrderDate: new Date().toISOString().split('T')[0],
+        dispatchDocNo: `DISP-${currentYear}-001`,
+        deliveryNoteDate: new Date().toISOString().split('T')[0],
+        dispatchedThrough: companyProfile.dispatchedThrough || 'Courier',
+        destination: companyProfile.destination || 'Mumbai',
+        termsOfDelivery: companyProfile.termsOfDelivery || 'As discussed'
+      };
+      
+      // Update form with basic defaults immediately
+      setFormData(prev => ({
+        ...prev,
+        ...basicDefaults
+      }));
+      
+      // Get previous sales for this client to auto-increment numbers
+      let lastOrderNumber = '';
+      let lastDispatchNumber = '';
+      
+      try {
+        console.log('🔍 Fetching previous sales for client:', clientId);
+        const { data: previousSales } = await supabase
+          .from('sales')
+          .select('buyers_order_number, dispatch_doc_no')
+          .eq('client_id', clientId)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        
+        console.log('📊 Previous sales data:', previousSales);
+        
+        if (previousSales && previousSales.length > 0) {
+          const lastSale = previousSales[0];
+          lastOrderNumber = lastSale.buyers_order_number || '';
+          lastDispatchNumber = lastSale.dispatch_doc_no || '';
+          console.log('📈 Last order number:', lastOrderNumber);
+          console.log('📈 Last dispatch number:', lastDispatchNumber);
+        }
+      } catch (error) {
+        console.log('❌ Error fetching previous sales:', error);
+      }
+      
+      // Auto-generate next numbers
+      const generateNextNumber = (lastNumber: string, prefix: string) => {
+        if (!lastNumber) return `${prefix}-${currentYear}-001`;
+        
+        const match = lastNumber.match(new RegExp(`${prefix}-\\d{4}-(\\d+)`));
+        if (match) {
+          const nextNum = parseInt(match[1]) + 1;
+          return `${prefix}-${currentYear}-${nextNum.toString().padStart(3, '0')}`;
+        }
+        return `${prefix}-${currentYear}-001`;
+      };
+      
+      const nextOrderNumber = generateNextNumber(lastOrderNumber, 'PO');
+      const nextDispatchNumber = generateNextNumber(lastDispatchNumber, 'DISP');
+      
+      console.log('🆕 Generated next order number:', nextOrderNumber);
+      console.log('🆕 Generated next dispatch number:', nextDispatchNumber);
+      
+      // Get client's state from address or set default
+      const clientState = client.state || extractStateFromAddress(client.address || '') || companyProfile.buyerStateName;
+      console.log('📍 Client state:', clientState);
+      
+      const updatedFormData = {
         ...formData,
         clientId,
         clientName: client.name,
         firmName: client.businessName || '',
         gstNumber: client.gstNumber || '',
         address: client.address || '',
-        phoneNumber: client.phone || ''
-      });
+        phoneNumber: client.phone || '',
+        // Auto-fill invoice fields with improved numbers
+        buyersOrderNumber: nextOrderNumber,
+        buyersOrderDate: new Date().toISOString().split('T')[0],
+        dispatchDocNo: nextDispatchNumber,
+        deliveryNoteDate: new Date().toISOString().split('T')[0],
+        dispatchedThrough: companyProfile.dispatchedThrough || 'Courier',
+        destination: clientState || companyProfile.destination || 'Mumbai',
+        termsOfDelivery: companyProfile.termsOfDelivery || 'As discussed'
+      };
+      
+      console.log('✅ Updated form data:', updatedFormData);
+      setFormData(updatedFormData);
     }
+  };
+
+  // Helper function to extract state from address
+  const extractStateFromAddress = (address: string): string | null => {
+    const statePatterns = [
+      'Maharashtra', 'Delhi', 'Karnataka', 'Tamil Nadu', 'Gujarat', 'Uttar Pradesh',
+      'West Bengal', 'Telangana', 'Andhra Pradesh', 'Kerala', 'Rajasthan', 'Madhya Pradesh',
+      'Punjab', 'Haryana', 'Bihar', 'Odisha', 'Assam', 'Jharkhand', 'Chhattisgarh',
+      'Uttarakhand', 'Himachal Pradesh', 'Goa', 'Manipur', 'Meghalaya', 'Tripura',
+      'Arunachal Pradesh', 'Nagaland', 'Mizoram', 'Sikkim'
+    ];
+    
+    for (const state of statePatterns) {
+      if (address.toLowerCase().includes(state.toLowerCase())) {
+        return state;
+      }
+    }
+    return null;
   };
 
   console.log('Form render - filtered stones:', filteredStones.length);
@@ -1208,7 +1915,25 @@ function SaleForm({
 
           <div>
             <Label htmlFor="clientId">Client *</Label>
-            <Select value={formData.clientId} onValueChange={handleClientChange}>
+            <Select value={formData.clientId} onValueChange={(clientId) => {
+              console.log('🎯 Client selected:', clientId);
+              // First update the client info immediately
+              const client = clients.find(c => c.id === clientId);
+              if (client) {
+                setFormData({
+                  ...formData,
+                  clientId,
+                  clientName: client.name,
+                  firmName: client.businessName || '',
+                  gstNumber: client.gstNumber || '',
+                  address: client.address || '',
+                  phoneNumber: client.phone || ''
+                });
+                
+                // Then trigger the async auto-fill
+                handleClientChange(clientId);
+              }
+            }}>
               <SelectTrigger className="input-modern">
                 <SelectValue placeholder="Select client" />
               </SelectTrigger>
@@ -1220,6 +1945,21 @@ function SaleForm({
                 ))}
               </SelectContent>
             </Select>
+            {formData.clientId && (
+              <div className="mt-2">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    console.log('🧪 Testing auto-fill for client:', formData.clientId);
+                    handleClientChange(formData.clientId);
+                  }}
+                >
+                  🔄 Test Auto-Fill
+                </Button>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -1347,6 +2087,287 @@ function SaleForm({
             <Label>Trustworthy Client</Label>
           </div>
         </div>
+
+        {/* Invoice Details */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-foreground">Invoice Details</h3>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="buyersOrderNumber">Buyer's Order No.</Label>
+              <Input
+                id="buyersOrderNumber"
+                value={formData.buyersOrderNumber}
+                onChange={(e) => setFormData({...formData, buyersOrderNumber: e.target.value})}
+                className="input-modern"
+                placeholder="PO-2025-001"
+              />
+            </div>
+            <div>
+              <Label htmlFor="buyersOrderDate">Order Date</Label>
+              <Input
+                id="buyersOrderDate"
+                type="date"
+                value={formData.buyersOrderDate}
+                onChange={(e) => setFormData({...formData, buyersOrderDate: e.target.value})}
+                className="input-modern"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="dispatchDocNo">Dispatch Doc No.</Label>
+              <Input
+                id="dispatchDocNo"
+                value={formData.dispatchDocNo}
+                onChange={(e) => setFormData({...formData, dispatchDocNo: e.target.value})}
+                className="input-modern"
+                placeholder="DISP-2025-089"
+              />
+            </div>
+            <div>
+              <Label htmlFor="deliveryNoteDate">Delivery Note Date</Label>
+              <Input
+                id="deliveryNoteDate"
+                type="date"
+                value={formData.deliveryNoteDate}
+                onChange={(e) => setFormData({...formData, deliveryNoteDate: e.target.value})}
+                className="input-modern"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <Label htmlFor="dispatchedThrough">Dispatched Through</Label>
+              <Select value={formData.dispatchedThrough} onValueChange={(value) => setFormData({...formData, dispatchedThrough: value})}>
+                <SelectTrigger className="input-modern">
+                  <SelectValue placeholder="Select method" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Courier">Courier</SelectItem>
+                  <SelectItem value="Hand Delivery">Hand Delivery</SelectItem>
+                  <SelectItem value="Transport Company">Transport Company</SelectItem>
+                  <SelectItem value="By Road">By Road</SelectItem>
+                  <SelectItem value="Express Delivery">Express Delivery</SelectItem>
+                  <SelectItem value="Local Pickup">Local Pickup</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="destination">Destination</Label>
+              <Select value={formData.destination} onValueChange={(value) => setFormData({...formData, destination: value})}>
+                <SelectTrigger className="input-modern">
+                  <SelectValue placeholder="Select destination" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Mumbai">Mumbai</SelectItem>
+                  <SelectItem value="Delhi">Delhi</SelectItem>
+                  <SelectItem value="Bangalore">Bangalore</SelectItem>
+                  <SelectItem value="Chennai">Chennai</SelectItem>
+                  <SelectItem value="Kolkata">Kolkata</SelectItem>
+                  <SelectItem value="Hyderabad">Hyderabad</SelectItem>
+                  <SelectItem value="Ahmedabad">Ahmedabad</SelectItem>
+                  <SelectItem value="Pune">Pune</SelectItem>
+                  <SelectItem value="Jaipur">Jaipur</SelectItem>
+                  <SelectItem value="Lucknow">Lucknow</SelectItem>
+                  <SelectItem value="Kanpur">Kanpur</SelectItem>
+                  <SelectItem value="Nagpur">Nagpur</SelectItem>
+                  <SelectItem value="Indore">Indore</SelectItem>
+                  <SelectItem value="Thane">Thane</SelectItem>
+                  <SelectItem value="Bhopal">Bhopal</SelectItem>
+                  <SelectItem value="Visakhapatnam">Visakhapatnam</SelectItem>
+                  <SelectItem value="Patna">Patna</SelectItem>
+                  <SelectItem value="Vadodara">Vadodara</SelectItem>
+                  <SelectItem value="Ghaziabad">Ghaziabad</SelectItem>
+                  <SelectItem value="Ludhiana">Ludhiana</SelectItem>
+                  <SelectItem value="Agra">Agra</SelectItem>
+                  <SelectItem value="Nashik">Nashik</SelectItem>
+                  <SelectItem value="Faridabad">Faridabad</SelectItem>
+                  <SelectItem value="Meerut">Meerut</SelectItem>
+                  <SelectItem value="Rajkot">Rajkot</SelectItem>
+                  <SelectItem value="Kalyan">Kalyan</SelectItem>
+                  <SelectItem value="Vasai">Vasai</SelectItem>
+                  <SelectItem value="Varanasi">Varanasi</SelectItem>
+                  <SelectItem value="Srinagar">Srinagar</SelectItem>
+                  <SelectItem value="Aurangabad">Aurangabad</SelectItem>
+                  <SelectItem value="Dhanbad">Dhanbad</SelectItem>
+                  <SelectItem value="Amritsar">Amritsar</SelectItem>
+                  <SelectItem value="Allahabad">Allahabad</SelectItem>
+                  <SelectItem value="Ranchi">Ranchi</SelectItem>
+                  <SelectItem value="Howrah">Howrah</SelectItem>
+                  <SelectItem value="Coimbatore">Coimbatore</SelectItem>
+                  <SelectItem value="Jabalpur">Jabalpur</SelectItem>
+                  <SelectItem value="Gwalior">Gwalior</SelectItem>
+                  <SelectItem value="Vijayawada">Vijayawada</SelectItem>
+                  <SelectItem value="Jodhpur">Jodhpur</SelectItem>
+                  <SelectItem value="Madurai">Madurai</SelectItem>
+                  <SelectItem value="Raipur">Raipur</SelectItem>
+                  <SelectItem value="Kota">Kota</SelectItem>
+                  <SelectItem value="Guwahati">Guwahati</SelectItem>
+                  <SelectItem value="Chandigarh">Chandigarh</SelectItem>
+                  <SelectItem value="Solapur">Solapur</SelectItem>
+                  <SelectItem value="Hubli">Hubli</SelectItem>
+                  <SelectItem value="Bareilly">Bareilly</SelectItem>
+                  <SelectItem value="Moradabad">Moradabad</SelectItem>
+                  <SelectItem value="Mysore">Mysore</SelectItem>
+                  <SelectItem value="Gurgaon">Gurgaon</SelectItem>
+                  <SelectItem value="Aligarh">Aligarh</SelectItem>
+                  <SelectItem value="Jalandhar">Jalandhar</SelectItem>
+                  <SelectItem value="Tiruchirappalli">Tiruchirappalli</SelectItem>
+                  <SelectItem value="Bhubaneswar">Bhubaneswar</SelectItem>
+                  <SelectItem value="Salem">Salem</SelectItem>
+                  <SelectItem value="Warangal">Warangal</SelectItem>
+                  <SelectItem value="Guntur">Guntur</SelectItem>
+                  <SelectItem value="Bhiwandi">Bhiwandi</SelectItem>
+                  <SelectItem value="Saharanpur">Saharanpur</SelectItem>
+                  <SelectItem value="Gorakhpur">Gorakhpur</SelectItem>
+                  <SelectItem value="Bikaner">Bikaner</SelectItem>
+                  <SelectItem value="Amravati">Amravati</SelectItem>
+                  <SelectItem value="Noida">Noida</SelectItem>
+                  <SelectItem value="Jamshedpur">Jamshedpur</SelectItem>
+                  <SelectItem value="Bhilai">Bhilai</SelectItem>
+                  <SelectItem value="Cuttack">Cuttack</SelectItem>
+                  <SelectItem value="Firozabad">Firozabad</SelectItem>
+                  <SelectItem value="Kochi">Kochi</SelectItem>
+                  <SelectItem value="Nellore">Nellore</SelectItem>
+                  <SelectItem value="Bhavnagar">Bhavnagar</SelectItem>
+                  <SelectItem value="Dehradun">Dehradun</SelectItem>
+                  <SelectItem value="Durgapur">Durgapur</SelectItem>
+                  <SelectItem value="Asansol">Asansol</SelectItem>
+                  <SelectItem value="Rourkela">Rourkela</SelectItem>
+                  <SelectItem value="Nanded">Nanded</SelectItem>
+                  <SelectItem value="Kolhapur">Kolhapur</SelectItem>
+                  <SelectItem value="Ajmer">Ajmer</SelectItem>
+                  <SelectItem value="Akola">Akola</SelectItem>
+                  <SelectItem value="Gulbarga">Gulbarga</SelectItem>
+                  <SelectItem value="Loni">Loni</SelectItem>
+                  <SelectItem value="Ujjain">Ujjain</SelectItem>
+                  <SelectItem value="Siliguri">Siliguri</SelectItem>
+                  <SelectItem value="Jhansi">Jhansi</SelectItem>
+                  <SelectItem value="Ulhasnagar">Ulhasnagar</SelectItem>
+                  <SelectItem value="Jammu">Jammu</SelectItem>
+                  <SelectItem value="Sangli">Sangli</SelectItem>
+                  <SelectItem value="Miraj">Miraj</SelectItem>
+                  <SelectItem value="Belgaum">Belgaum</SelectItem>
+                  <SelectItem value="Mangalore">Mangalore</SelectItem>
+                  <SelectItem value="Ambattur">Ambattur</SelectItem>
+                  <SelectItem value="Tirunelveli">Tirunelveli</SelectItem>
+                  <SelectItem value="Malegaon">Malegaon</SelectItem>
+                  <SelectItem value="Gaya">Gaya</SelectItem>
+                  <SelectItem value="Jalgaon">Jalgaon</SelectItem>
+                  <SelectItem value="Udaipur">Udaipur</SelectItem>
+                  <SelectItem value="Maheshtala">Maheshtala</SelectItem>
+                  <SelectItem value="Tirupur">Tirupur</SelectItem>
+                  <SelectItem value="Davanagere">Davanagere</SelectItem>
+                  <SelectItem value="Kozhikode">Kozhikode</SelectItem>
+                  <SelectItem value="Akbarpur">Akbarpur</SelectItem>
+                  <SelectItem value="Kurnool">Kurnool</SelectItem>
+                  <SelectItem value="Bokaro">Bokaro</SelectItem>
+                  <SelectItem value="Rajahmundry">Rajahmundry</SelectItem>
+                  <SelectItem value="Ballari">Ballari</SelectItem>
+                  <SelectItem value="Agartala">Agartala</SelectItem>
+                  <SelectItem value="Bhagalpur">Bhagalpur</SelectItem>
+                  <SelectItem value="Latur">Latur</SelectItem>
+                  <SelectItem value="Dhule">Dhule</SelectItem>
+                  <SelectItem value="Korba">Korba</SelectItem>
+                  <SelectItem value="Bhilwara">Bhilwara</SelectItem>
+                  <SelectItem value="Brahmapur">Brahmapur</SelectItem>
+                  <SelectItem value="Muzaffarpur">Muzaffarpur</SelectItem>
+                  <SelectItem value="Ahmednagar">Ahmednagar</SelectItem>
+                  <SelectItem value="Mathura">Mathura</SelectItem>
+                  <SelectItem value="Kollam">Kollam</SelectItem>
+                  <SelectItem value="Avadi">Avadi</SelectItem>
+                  <SelectItem value="Kadapa">Kadapa</SelectItem>
+                  <SelectItem value="Anantapuram">Anantapuram</SelectItem>
+                  <SelectItem value="Tiruvottiyur">Tiruvottiyur</SelectItem>
+                  <SelectItem value="Bardhaman">Bardhaman</SelectItem>
+                  <SelectItem value="Kamarhati">Kamarhati</SelectItem>
+                  <SelectItem value="Sasthamkotta">Sasthamkotta</SelectItem>
+                  <SelectItem value="Bihar Sharif">Bihar Sharif</SelectItem>
+                  <SelectItem value="Panipat">Panipat</SelectItem>
+                  <SelectItem value="Darbhanga">Darbhanga</SelectItem>
+                  <SelectItem value="Bally">Bally</SelectItem>
+                  <SelectItem value="Aizawl">Aizawl</SelectItem>
+                  <SelectItem value="Dewas">Dewas</SelectItem>
+                  <SelectItem value="Ichalkaranji">Ichalkaranji</SelectItem>
+                  <SelectItem value="Tirupati">Tirupati</SelectItem>
+                  <SelectItem value="Karnal">Karnal</SelectItem>
+                  <SelectItem value="Bathinda">Bathinda</SelectItem>
+                  <SelectItem value="Rampur">Rampur</SelectItem>
+                  <SelectItem value="Shivamogga">Shivamogga</SelectItem>
+                  <SelectItem value="Ratlam">Ratlam</SelectItem>
+                  <SelectItem value="Modinagar">Modinagar</SelectItem>
+                  <SelectItem value="Durg">Durg</SelectItem>
+                  <SelectItem value="Shillong">Shillong</SelectItem>
+                  <SelectItem value="Imphal">Imphal</SelectItem>
+                  <SelectItem value="Hapur">Hapur</SelectItem>
+                  <SelectItem value="Ranipet">Ranipet</SelectItem>
+                  <SelectItem value="Anand">Anand</SelectItem>
+                  <SelectItem value="Munger">Munger</SelectItem>
+                  <SelectItem value="Bhind">Bhind</SelectItem>
+                  <SelectItem value="Arrah">Arrah</SelectItem>
+                  <SelectItem value="Rajnandgaon">Rajnandgaon</SelectItem>
+                  <SelectItem value="Waidhan">Waidhan</SelectItem>
+                  <SelectItem value="Sujangarh">Sujangarh</SelectItem>
+                  <SelectItem value="Nangloi Jat">Nangloi Jat</SelectItem>
+                  <SelectItem value="Kanpur Cantonment">Kanpur Cantonment</SelectItem>
+                  <SelectItem value="Vidisha">Vidisha</SelectItem>
+                  <SelectItem value="Gondia">Gondia</SelectItem>
+                  <SelectItem value="Sagar">Sagar</SelectItem>
+                  <SelectItem value="Bharatpur">Bharatpur</SelectItem>
+                  <SelectItem value="Hajipur">Hajipur</SelectItem>
+                  <SelectItem value="Chhapra">Chhapra</SelectItem>
+                  <SelectItem value="Khandwa">Khandwa</SelectItem>
+                  <SelectItem value="Yamunanagar">Yamunanagar</SelectItem>
+                  <SelectItem value="Bidar">Bidar</SelectItem>
+                  <SelectItem value="Patiala">Patiala</SelectItem>
+                  <SelectItem value="Kharagpur">Kharagpur</SelectItem>
+                  <SelectItem value="Puducherry">Puducherry</SelectItem>
+                  <SelectItem value="Port Blair">Port Blair</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="termsOfDelivery">Terms of Delivery</Label>
+              <Select value={formData.termsOfDelivery} onValueChange={(value) => setFormData({...formData, termsOfDelivery: value})}>
+                <SelectTrigger className="input-modern">
+                  <SelectValue placeholder="Select terms" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="As discussed">As discussed</SelectItem>
+                  <SelectItem value="FOB">FOB (Free On Board)</SelectItem>
+                  <SelectItem value="CIF">CIF (Cost, Insurance, Freight)</SelectItem>
+                  <SelectItem value="Ex-factory">Ex-factory</SelectItem>
+                  <SelectItem value="Ex-works">Ex-works</SelectItem>
+                  <SelectItem value="DDP">DDP (Delivered Duty Paid)</SelectItem>
+                  <SelectItem value="DDU">DDU (Delivered Duty Unpaid)</SelectItem>
+                  <SelectItem value="CPT">CPT (Carriage Paid To)</SelectItem>
+                  <SelectItem value="CIP">CIP (Carriage and Insurance Paid)</SelectItem>
+                  <SelectItem value="FAS">FAS (Free Alongside Ship)</SelectItem>
+                  <SelectItem value="CFR">CFR (Cost and Freight)</SelectItem>
+                  <SelectItem value="DAF">DAF (Delivered At Frontier)</SelectItem>
+                  <SelectItem value="DES">DES (Delivered Ex Ship)</SelectItem>
+                  <SelectItem value="DEQ">DEQ (Delivered Ex Quay)</SelectItem>
+                  <SelectItem value="DDP">DDP (Delivered Duty Paid)</SelectItem>
+                  <SelectItem value="DDU">DDU (Delivered Duty Unpaid)</SelectItem>
+                  <SelectItem value="EXW">EXW (Ex Works)</SelectItem>
+                  <SelectItem value="FCA">FCA (Free Carrier)</SelectItem>
+                  <SelectItem value="Net 30">Net 30</SelectItem>
+                  <SelectItem value="Net 60">Net 60</SelectItem>
+                  <SelectItem value="Net 90">Net 90</SelectItem>
+                  <SelectItem value="Immediate">Immediate</SelectItem>
+                  <SelectItem value="50% Advance">50% Advance</SelectItem>
+                  <SelectItem value="100% Advance">100% Advance</SelectItem>
+                  <SelectItem value="COD">COD (Cash on Delivery)</SelectItem>
+                  <SelectItem value="Custom">Custom</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Items */}
@@ -1407,7 +2428,7 @@ function SaleForm({
                               {stone.type || 'Unknown Type'}
                             </div>
                             <div className="text-xs text-muted-foreground mt-1">
-                              ID: {stone.gemId || stone.id} • {carat}ct • ₹{pricePerCarat}/ct
+                              ID: {stone.gemId || stone.id} • {carat}ct • ₹{pricePerCarat}/ct • Available: {stone.quantity || 0}
                             </div>
                           </div>
                           <div className="text-xs text-primary font-medium">
@@ -1448,9 +2469,23 @@ function SaleForm({
               min={1}
               value={newItem.quantity}
               onChange={(e) => setNewItem({...newItem, quantity: parseInt(e.target.value || '1') || 1})}
-              className="input-modern"
+              className={`input-modern ${newItem.stoneId && (() => {
+                const stone = inventory.find(s => s.id === newItem.stoneId);
+                return stone && newItem.quantity > (stone.quantity || 0) ? 'border-red-500' : '';
+              })()}`}
               placeholder="e.g., 1"
             />
+            {newItem.stoneId && (() => {
+              const stone = inventory.find(s => s.id === newItem.stoneId);
+              if (stone && newItem.quantity > (stone.quantity || 0)) {
+                return (
+                  <div className="text-xs text-red-500 mt-1">
+                    Warning: Only {stone.quantity || 0} available
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </div>
 
           <div>
@@ -1557,7 +2592,15 @@ function SaleForm({
                 isOutOfState: sale.isOutOfState || false,
                 paymentStatus: sale.paymentStatus,
                 waitingPeriod: sale.waitingPeriod,
-                isTrustworthy: sale.isTrustworthy
+                isTrustworthy: sale.isTrustworthy,
+                // Include invoice-specific fields
+                buyersOrderNumber: sale.buyersOrderNumber,
+                buyersOrderDate: sale.buyersOrderDate,
+                dispatchDocNo: sale.dispatchDocNo,
+                deliveryNoteDate: sale.deliveryNoteDate,
+                dispatchedThrough: sale.dispatchedThrough,
+                destination: sale.destination,
+                termsOfDelivery: sale.termsOfDelivery
               };
               downloadInvoice(invoiceData);
               toast({

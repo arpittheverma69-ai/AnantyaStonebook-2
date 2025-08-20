@@ -37,19 +37,25 @@ export default function LoginPage() {
   }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (data: LoginForm) => {
+    console.log("🚀 Login form submitted with:", { email: data.email });
     setIsLoading(true);
     try {
       const result = isRegisterMode
         ? await signUp(data.email, data.password)
         : await signIn(data.email, data.password);
 
+      console.log("🚀 Auth result:", result);
+
       if (result && "error" in result && result.error) {
+        console.error("🚀 Auth failed:", result.error);
         toast({ title: isRegisterMode ? "Registration Failed" : "Login Failed", description: result.error, variant: "destructive" });
       } else {
+        console.log("🚀 Auth successful, navigating to dashboard");
         toast({ title: isRegisterMode ? "Registration Successful" : "Login Successful", description: "Welcome to Anantya Stone" });
         navigate("/dashboard");
       }
     } catch (error) {
+      console.error("🚀 Login exception:", error);
       toast({ title: "Error", description: "An error occurred. Please try again.", variant: "destructive" });
     } finally {
       setIsLoading(false);

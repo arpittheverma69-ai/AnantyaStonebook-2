@@ -69,7 +69,7 @@ function toSnakeCaseInventory(input: any) {
 
 // Utility: Map camelCase sale object to snake_case for Supabase
 function toSnakeCaseSale(input: any) {
-  return {
+  const payload: any = {
     sale_id: input.saleId,
     date: input.date,
     client_id: input.clientId,
@@ -82,7 +82,27 @@ function toSnakeCaseSale(input: any) {
     notes: input.notes,
     created_at: input.createdAt,
     updated_at: input.updatedAt,
-  }
+  };
+  
+  // Add optional fields if they exist
+  if (input.waitingPeriod !== undefined) payload.waiting_period = input.waitingPeriod;
+  if (input.isTrustworthy !== undefined) payload.is_trustworthy = input.isTrustworthy;
+  if (input.anyDiscount !== undefined) payload.any_discount = input.anyDiscount;
+  if (input.isOutOfState !== undefined) payload.is_out_of_state = input.isOutOfState;
+  if (input.cgst !== undefined) payload.cgst = input.cgst;
+  if (input.sgst !== undefined) payload.sgst = input.sgst;
+  if (input.igst !== undefined) payload.igst = input.igst;
+  if (input.totalWithTax !== undefined) payload.total_with_tax = input.totalWithTax;
+  // Add invoice-specific fields
+  if (input.buyersOrderNumber !== undefined) payload.buyers_order_number = input.buyersOrderNumber;
+  if (input.buyersOrderDate !== undefined) payload.buyers_order_date = input.buyersOrderDate;
+  if (input.dispatchDocNo !== undefined) payload.dispatch_doc_no = input.dispatchDocNo;
+  if (input.deliveryNoteDate !== undefined) payload.delivery_note_date = input.deliveryNoteDate;
+  if (input.dispatchedThrough !== undefined) payload.dispatched_through = input.dispatchedThrough;
+  if (input.destination !== undefined) payload.destination = input.destination;
+  if (input.termsOfDelivery !== undefined) payload.terms_of_delivery = input.termsOfDelivery;
+  
+  return payload;
 }
 
 function toSnakeCaseSaleItem(input: any, saleId: string) {
@@ -120,6 +140,19 @@ function toSnakeCaseSupplier(input: any) {
     reliability_score: input.reliabilityScore,
     last_transaction_date: input.lastTransactionDate && input.lastTransactionDate !== "" ? input.lastTransactionDate : null,
   }
+}
+
+function toSnakeCaseTask(input: any) {
+  const payload: any = {};
+  if (input.title !== undefined) payload.title = input.title;
+  if (input.status !== undefined) payload.status = input.status;
+  if (input.description !== undefined) payload.description = input.description;
+  if (input.notes !== undefined) payload.notes = input.notes;
+  if (input.assignedTo !== undefined) payload.assigned_to = input.assignedTo;
+  if (input.dueDate || input.due_date) payload.due_date = input.dueDate || input.due_date;
+  if (input.priority !== undefined) payload.priority = input.priority;
+  // Intentionally omitting related_to and related_type as they may not exist in DB
+  return payload;
 }
 
 // Inventory Operations
@@ -686,10 +719,11 @@ export const taskService = {
     return data || []
   },
 
-  async create(task: InsertTask): Promise<Task> {
+  async create(task: any): Promise<Task> {
+    const payload = toSnakeCaseTask(task)
     const { data, error } = await supabase
       .from('tasks')
-      .insert(task)
+      .insert(payload)
       .select()
       .single()
     
@@ -697,10 +731,11 @@ export const taskService = {
     return data
   },
 
-  async update(id: string, updates: UpdateTask): Promise<Task> {
+  async update(id: string, updates: any): Promise<Task> {
+    const payload = toSnakeCaseTask(updates)
     const { data, error } = await supabase
       .from('tasks')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update({ ...payload, updated_at: new Date().toISOString() })
       .eq('id', id)
       .select()
       .single()

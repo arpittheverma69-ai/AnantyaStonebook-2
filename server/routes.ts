@@ -605,6 +605,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // CA Legal Assistant - General Gemini AI endpoint
+  app.post("/api/gemini", async (req, res) => {
+    try {
+      const { prompt } = req.body;
+      
+      if (!prompt) {
+        return res.status(400).json({ message: "Prompt is required" });
+      }
+
+      // Use the Gemini service to generate a response
+      const response = await geminiService.generateText(prompt);
+      res.json({ response });
+    } catch (error) {
+      console.error("Gemini AI error:", error);
+      res.status(500).json({ message: "Failed to generate AI response" });
+    }
+  });
+
   // Astrological AI routes
   app.post("/api/astrological/analyze", async (req, res) => {
     try {

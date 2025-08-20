@@ -7,10 +7,12 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import { BarChart2, PieChart, LineChart as LineIcon, Download, FileSpreadsheet, FileText } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line, Pie, PieChart as RePieChart, Cell } from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { downloadStockReport, type StockItem } from '@/lib/stock-report';
 
 const colors = ['#60a5fa', '#f59e0b', '#34d399', '#f43f5e', '#a78bfa'];
 
@@ -55,7 +57,7 @@ export default function ReportingAnalytics() {
   // Fetch real data
   const { data: metrics } = useQuery<Metrics>({ queryKey: ["/api/dashboard/metrics"] });
   const { data: sales } = useQuery<Sale[]>({ queryKey: ["/api/sales"] });
-  const { data: inventory } = useQuery<InventoryItem[]>({ queryKey: ["/api/inventory"] });
+  const { data: inventory } = useQuery<any[]>({ queryKey: ["/api/inventory"] });
   const { data: aiInsights } = useQuery<{ insights: string[] }>({ queryKey: ["/api/ai/insights"] });
 
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -195,6 +197,33 @@ export default function ReportingAnalytics() {
     if (type === 'csv') return exportCSV();
     return exportExcel();
   };
+
+  // Stock Report helpers
+  const inventoryForReport: StockItem[] = useMemo(() => {
+    return (inventory || []).map((item: any) => ({
+      id: item.id,
+      gemId: item.gem_id || item.gemId,
+      type: item.type,
+      grade: item.grade,
+      carat: item.carat ?? item.weight,
+      origin: item.origin,
+      quantity: item.quantity,
+      status: item.status,
+      isAvailable: item.is_available ?? item.isAvailable,
+      pricePerCarat: item.price_per_carat ?? item.pricePerCarat,
+      totalPrice: item.total_price ?? item.totalPrice ?? item.sellingPrice,
+      sellingPrice: item.sellingPrice,
+    }));
+  }, [inventory]);
+
+  const downloadStockPDF = (onlyAvailable: boolean) => {
+    downloadStockReport(inventoryForReport, {
+      title: 'Stock Report',
+      onlyAvailable,
+      filename: onlyAvailable ? 'Stock_Report_Available.pdf' : 'Stock_Report_All.pdf',
+    });
+  };
+  const [onlyAvailView, setOnlyAvailView] = useState(true);
 
   // Persist builder state locally so it behaves more like a real builder
   useEffect(() => {
@@ -338,10 +367,11 @@ export default function ReportingAnalytics() {
       </div>
 
       <Tabs defaultValue="dashboard" className="w-full">
-        <TabsList className="grid grid-cols-3 w-full">
+        <TabsList className="grid grid-cols-4 w-full">
           <TabsTrigger value="dashboard">Performance Dashboards</TabsTrigger>
           <TabsTrigger value="builder">Custom Report Builder</TabsTrigger>
           <TabsTrigger value="exports">Export Tools</TabsTrigger>
+          <TabsTrigger value="stock">Stock Report</TabsTrigger>
         </TabsList>
 
         <TabsContent value="dashboard" className="space-y-6 mt-4">
@@ -494,6 +524,61 @@ export default function ReportingAnalytics() {
               ) : (
                 <div className="text-gray-600">No insights available yet.</div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="stock" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Stock Report</CardTitle>
+              <CardDescription>Real-time inventory with printable PDF</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => downloadStockPDF(true)}>
+                  <FileText className="w-4 h-4 mr-1" /> Download PDF (Available Only)
+                </Button>
+                <Button variant="outline" onClick={() => downloadStockPDF(false)}>
+                  <FileText className="w-4 h-4 mr-1" /> Download PDF (All Items)
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch id="only-avail" checked={onlyAvailView} onCheckedChange={setOnlyAvailView} />
+                <Label htmlFor="only-avail" className="text-sm">Show only available items</Label>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left border-b">
+                      <th className="py-2 pr-4">Gem ID</th>
+                      <th className="py-2 pr-4">Type</th>
+                      <th className="py-2 pr-4">Grade</th>
+                      <th className="py-2 pr-4">Carat</th>
+                      <th className="py-2 pr-4">Origin</th>
+                      <th className="py-2 pr-4">Qty</th>
+                      <th className="py-2 pr-4">Status</th>
+                      <th className="py-2 pr-4">Price/ct</th>
+                      <th className="py-2">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inventoryForReport.filter(it => !onlyAvailView || it.isAvailable || it.status === 'In Stock').map((it, idx) => (
+                      <tr key={idx} className="border-b last:border-0">
+                        <td className="py-2 pr-4 font-mono">{it.gemId || it.id}</td>
+                        <td className="py-2 pr-4">{it.type}</td>
+                        <td className="py-2 pr-4">{it.grade}</td>
+                        <td className="py-2 pr-4">{Number(it.carat || 0).toFixed(2)}</td>
+                        <td className="py-2 pr-4">{it.origin}</td>
+                        <td className="py-2 pr-4">{it.quantity}</td>
+                        <td className="py-2 pr-4">{it.status || (it.isAvailable ? 'In Stock' : 'Sold')}</td>
+                        <td className="py-2 pr-4">{it.pricePerCarat ? `Rs. ${Number(it.pricePerCarat).toLocaleString()}` : '-'}</td>
+                        <td className="py-2">{`Rs. ${Number(it.totalPrice || it.sellingPrice || 0).toLocaleString()}`}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

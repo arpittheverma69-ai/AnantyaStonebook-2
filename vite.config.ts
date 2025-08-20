@@ -33,5 +33,14 @@ export default defineConfig({
       strict: true,
       deny: ["**/.*"],
     },
+    headers: {
+      // Remove CSP headers that might block Supabase
+      'Content-Security-Policy': '',
+      'X-Content-Security-Policy': '',
+      // Allow all origins for development
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, apikey',
+    },
   },
 });

@@ -27,6 +27,9 @@ import ReportingAnalytics from "@/pages/reporting-analytics";
 import QualityComparison from "@/pages/quality-comparison";
 import MarketPriceTracker from "@/pages/market-price-tracker";
 import ScanFind from "@/pages/scan-find";
+import CALegalAssistant from "@/pages/ca-legal-assistant";
+import InvoicePrint from "@/pages/invoice-print";
+import CompanySettings from "@/pages/company-settings";
 
 function Router() {
   return (
@@ -183,6 +186,21 @@ function Router() {
         <ProtectedRoute>
           <MainLayout>
             <ScanFind />
+          </MainLayout>
+        </ProtectedRoute>
+      } />
+      <Route path="/ca-legal-assistant" element={
+        <ProtectedRoute>
+          <MainLayout>
+            <CALegalAssistant />
+          </MainLayout>
+        </ProtectedRoute>
+      } />
+      <Route path="/invoice/print" element={<InvoicePrint />} />
+      <Route path="/company-settings" element={
+        <ProtectedRoute>
+          <MainLayout>
+            <CompanySettings />
           </MainLayout>
         </ProtectedRoute>
       } />

@@ -403,6 +403,52 @@ CRITICAL REQUIREMENTS:
       return [];
     }
   }
+
+  async generateText(prompt: string): Promise<string> {
+    try {
+      const systemPrompt = `You are an expert Chartered Accountant (CA) with deep knowledge of taxation, GST, and financial strategies in India. You also specialize in the gemstone and jewelry industry, knowing every small and big trick to:
+
+Save maximum tax legally
+Optimize GST input and output
+Structure the business for high profitability
+Handle imports, exports, and compliance specific to gemstones
+Suggest investment structures, audits, and accounting tricks
+Guide on invoices, billing, and international trade for gems
+Increase net profit while staying 100% compliant with Indian tax laws
+
+Your goal is to help gemstone businesses start and scale from sourcing to selling, both offline and online, and make them highly profitable.
+
+Provide detailed practical plans like you are their personal CA, not textbook answers. Include examples with numbers wherever possible. Focus on gemstone business realities, not just general business advice.
+
+Format: Use proper markdown formatting with **bold text**, # headings, bullet points (•), and tables with | separators. For tables, use proper markdown table format with headers, separator line (|----|), and data rows. Include specific section numbers (Section 80C, HSN 7103), and provide actionable steps with examples. Keep responses comprehensive but well-structured.`;
+
+      const fullPrompt = `${systemPrompt}
+
+Query: ${prompt}
+
+Provide practical, actionable advice for this gemstone business query.`;
+
+      const result = await this.model.generateContent(fullPrompt);
+      const response = await result.response;
+      let text = response.text();
+      
+      // Post-process to clean up formatting while preserving structure
+      text = text
+        .replace(/\n\n+/g, '\n\n') // Normalize line breaks
+        .trim();
+      
+      // Limit to approximately 500 words for comprehensive responses
+      const words = text.split(' ');
+      if (words.length > 500) {
+        text = words.slice(0, 500).join(' ') + '...';
+      }
+      
+      return text;
+    } catch (error) {
+      console.error('Error generating text:', error);
+      throw new Error('Failed to generate text with Gemini AI');
+    }
+  }
 }
 
 export const geminiService = new GeminiService();
